@@ -1,0 +1,10 @@
+{
+  "topic": "Indices",
+  "conceptLabel": "the laws of indices",
+  "explanation": "When you multiply powers of the same base, add the exponents. When you divide, subtract them. When you raise a power to another power, multiply the exponents. A negative exponent tells you to divide, so it subtracts from the total.",
+  "workedExample": "Simplify $2^3 \\times 2^2$. Same base, so add the exponents: $2^{3+2} = 2^5 = 32$. The base stays $2$ — only the exponents combine.",
+  "guidedQuestion": "Now try: simplify $3^2 \\times 3^4$.",
+  "guidedQuestionId": "g_ind_001",
+  "practiceQuestionIds": ["p_ind_001", "p_ind_002", "p_ind_003"],
+  "reassessmentQuestionIds": ["r_ind_001", "r_ind_002", "r_ind_003"]
+}

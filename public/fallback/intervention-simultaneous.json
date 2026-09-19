@@ -1,0 +1,10 @@
+{
+  "topic": "Simultaneous Equations",
+  "conceptLabel": "solving simultaneous equations by elimination",
+  "explanation": "To eliminate a variable, add or subtract the two equations so one letter cancels. Solve for the letter that is left, then put it back into an equation to find the other one. Finish by checking both equations, not just one — a pair of values has to fit both.",
+  "workedExample": "Solve $x + y = 8$ and $x - y = 2$. Add the equations: $2x = 10$, so $x = 5$. Then $5 + y = 8$ gives $y = 3$. Check the second equation: $5 - 3 = 2$. It fits both.",
+  "guidedQuestion": "Now try: solve $x + y = 10$ and $x - y = 4$. Write it as x = ..., y = ...",
+  "guidedQuestionId": "g_sim_001",
+  "practiceQuestionIds": ["p_sim_001", "p_sim_002", "p_sim_003"],
+  "reassessmentQuestionIds": ["r_sim_001", "r_sim_002", "r_sim_003"]
+}

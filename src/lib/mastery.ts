@@ -7,7 +7,10 @@ import type {
 
 // Deterministic mastery estimation. Pure functions over Attempt[] — no LLM.
 
-/** Demo impact weights per topic (how much fixing a topic moves readiness). */
+/**
+ * Impact weight per topic (how much fixing a topic moves readiness). Set by
+ * hand — not derived from the JAMB syllabus — so treat them as a tuning knob.
+ */
 export const TOPIC_IMPACT_WEIGHTS: Record<string, number> = {
   Algebra: 1.3,
   Geometry: 0.8,
@@ -107,8 +110,8 @@ function confidenceLabel(score: number): Confidence {
 
 /**
  * Aggregate a topic's attempts into a profile. `errorType` is assigned by the
- * diagnostic layer (distractor mapping) — not derivable from attempts alone —
- * and `impactWeight` defaults to 1.0 (callers pass the topic's demo weight).
+ * diagnostic layer (the AI's read, or the distractor mapping) — not derivable from attempts alone —
+ * and `impactWeight` defaults to 1.0 (callers pass the topic's impact weight).
  */
 export function computeTopicProfile(
   attempts: Attempt[],

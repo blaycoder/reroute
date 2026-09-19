@@ -25,9 +25,8 @@ cp .env.example .env
 #    - SQLITE_PATH defaults to ./db/reroute.db; add OPENAI_API_KEY or
 #      ZHIPU_API_KEY when the intervention generator is built.
 
-# 3. Create the database and load the question bank
-npm run db:init    # creates the tables from the contract
-npm run seed       # loads src/data/questions.json
+# 3. Create the database tables from the contract
+npm run db:init    # the question bank is code (src/data/question-bank.ts): nothing to seed
 
 # 4. Run
 npm run dev        # http://localhost:3000
@@ -44,7 +43,6 @@ npm run dev        # http://localhost:3000
 | `npm test`          | Vitest unit tests (logic layer)  |
 | `npm run emit`      | Re-emit `contract.json` / `contract.d.ts` after editing `contract.prisma` |
 | `npm run db:init`   | Create the database tables       |
-| `npm run seed`      | Replace the question bank        |
 
 ## Structure
 
@@ -67,11 +65,10 @@ src/
   lib/                  db · rules-engine · telemetry · mastery · katex
   design/               tokens.ts (source of truth) · theme.ts (Tailwind bridge) · utils.ts (cn · formatMath)
   types/                learner-state · question contracts
-  data/                 questions · misconceptions · syllabus-excerpts · fallback-interventions (server-only answer keys)
+  data/                 question-bank (40 questions + answer keys, server-only) · interventions (lesson content, no answers)
   prisma/               contract.prisma (source) · contract.json / contract.d.ts (emitted — commit, never edit)
 prisma.config.ts        Prisma 8 config (contract path, database path)
-scripts/                seed.ts
-public/fallback/        Offline fallback intervention payloads
+public/fallback/        Per-concept lesson text + question ids (no answers)
 db/                     Local SQLite file (git-ignored)
 ```
 
@@ -80,6 +77,36 @@ Design tokens live in `src/design/tokens.ts` and flow into Tailwind via
 and never hardcode hex/px/ms values in components. Use `cn()` and
 `formatMath()` from `src/design/utils.ts`; for Framer Motion, import
 `tokens.motion` (durations/easings) directly.
+
+## How it works
+
+Everything a student sees is computed from **their own answers** — there are no
+seeded profiles, demo students or scripted outcomes.
+
+- **Diagnostic:** 12 questions (3 per concept). The server routes: it always
+  opens with `q_alg_002`, then picks each next question from the student's real
+  answer *and* pace (correct+fast → harder, correct+slow → same level,
+  wrong+fast → easier, wrong+slow → switch topic and start easy), never
+  repeating one. Only one question is sent at a time, so a refresh resumes where
+  the student left off and no answer key reaches the browser.
+- **Passive telemetry:** first-tap time, dwell, option switches, idle time,
+  timeouts. Confidence and time pressure are inferred on the server; the student
+  is never asked how sure they are.
+- **Profile:** `computeLearnerProfile(sessionId)` (`src/lib/compute-profile.ts`)
+  rebuilds accuracy, speed, calibration, per-topic error type, priority and
+  readiness from the session's attempts, then caches it. Practice and
+  reassessment answers are attempts too, so mastery moves as the student learns.
+- **AI diagnosis:** at completion the AI reads each wrong answer against the
+  student's telemetry and may override the question's pre-tagged misconception
+  (shown on the fingerprint as "AI overrode the static mapping"). It has a 6s
+  deadline and a deterministic fallback. It never grades or writes questions.
+- **Questions:** all 40 are pre-written in `src/data/question-bank.ts`, each
+  wrong option tied to a named misconception. Nothing is generated on the fly.
+- **When the server is unreachable:** screens show a Retry button. After Retry
+  has been pressed more than once, a "Try cached data" link appears beneath it —
+  but only if this browser already holds a real response of the student's own
+  for that screen. Nothing is pre-seeded, and answers are never faked: they must
+  be graded by the server.
 
 ## Notes
 

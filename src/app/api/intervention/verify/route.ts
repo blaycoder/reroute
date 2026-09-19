@@ -1,38 +1,42 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { normalizeAnswer } from "@/lib/answer-normalize";
+import { getQuestion } from "@/data/question-bank";
+import { clientTelemetrySchema, recordAttempt } from "@/lib/attempts";
+import { computeLearnerProfile, pickPriorityTopic } from "@/lib/compute-profile";
 import { db } from "@/lib/db";
-import { getTopicImpactWeight } from "@/lib/mastery";
 import { jsonError, parseBody } from "@/lib/http";
-import type { InterventionContent } from "@/types/api";
+import type { StoredIntervention } from "@/lib/intervention-content";
+import type { InterventionVerifyResponse } from "@/types/api";
 import type { TopicProfile } from "@/types/learner-state";
 
 const bodySchema = z.object({
   interventionId: z.string().min(1),
-  answers: z.object({
-    guidedResponse: z.string().min(1),
-    practiceResponses: z.array(z.string()),
-    reassessmentResponses: z.array(z.string()).optional(),
-  }),
-  /** Captured client-side; stored-payload-ready, unused for scoring yet. */
-  telemetry: z.array(z.unknown()).optional(),
+  reassessment: z
+    .array(
+      z.object({
+        questionId: z.string().min(1),
+        /** null only when the timer ran out with nothing selected. */
+        selectedOption: z.string().min(1).nullable(),
+        telemetry: clientTelemetrySchema,
+      }),
+    )
+    .min(1),
 });
 
-const MASTERY_STEP = 0.2; // max mastery gain per verified intervention
-
-interface StoredContent {
-  content: InterventionContent;
-  answerKey: {
-    guided: string;
-    practice: string[];
-    reassessment: string[];
-  } | null;
-  source: string;
+function nextPriorityTopic(
+  byTopic: Record<string, TopicProfile>,
+  finishedTopic: string,
+): string | null {
+  const remaining = Object.fromEntries(
+    Object.entries(byTopic).filter(([topic]) => topic !== finishedTopic),
+  );
+  return pickPriorityTopic(remaining);
 }
 
-// Scores the intervention's check answers against the server-side answer key
-// and updates the intervention record. LLM-graded free-form verification
-// slots in here when the Socratic template lands.
+// Scores the reassessment on the server, records each answer as an attempt,
+// then recomputes the learner profile. "Mastery" is the topic's accuracy across
+// everything the student has answered, so mastery before and after are real
+// numbers from real attempts — nothing here is scripted.
 export async function POST(request: Request) {
   const body = await parseBody(request, bodySchema);
   if (!body.ok) {
@@ -44,82 +48,56 @@ export async function POST(request: Request) {
   });
   if (!intervention) return jsonError("Intervention not found", 404);
 
-  const stored = JSON.parse(intervention.contentJson) as StoredContent;
-  const masteryBefore = intervention.masteryBefore;
+  const stored = JSON.parse(intervention.contentJson) as StoredIntervention;
 
-  let masteryAfter = masteryBefore;
-  if (stored.answerKey) {
-    const key = stored.answerKey;
-    const reassessmentKey = key.reassessment ?? [];
-    const reassessmentResponses = body.data.answers.reassessmentResponses;
-    const countReassessment = Boolean(
-      reassessmentKey.length > 0 && reassessmentResponses,
-    );
-
-    const total =
-      1 +
-      key.practice.length +
-      (countReassessment ? reassessmentKey.length : 0);
-    let correct = 0;
-    if (
-      normalizeAnswer(body.data.answers.guidedResponse) ===
-      normalizeAnswer(key.guided)
-    ) {
-      correct += 1;
+  for (const item of body.data.reassessment) {
+    const question = getQuestion(item.questionId);
+    if (!question || !stored.reassessmentQuestionIds.includes(question.id)) {
+      return jsonError("Reassessment question not found", 404);
     }
-    key.practice.forEach((expected, index) => {
-      const actual = body.data.answers.practiceResponses[index];
-      if (actual && normalizeAnswer(actual) === normalizeAnswer(expected)) {
-        correct += 1;
-      }
+    // Repeating a verify call must not double-count an answer.
+    const existing = await db.orm.Attempt.where({
+      interventionId: intervention.id,
+      questionId: question.id,
+      purpose: "reassessment",
+    }).first();
+    if (existing) continue;
+
+    const result = await recordAttempt({
+      sessionId: stored.sessionId,
+      studentId: intervention.studentId,
+      question,
+      purpose: "reassessment",
+      interventionId: intervention.id,
+      selectedOption: item.selectedOption,
+      telemetry: item.telemetry,
     });
-    if (countReassessment) {
-      reassessmentKey.forEach((expected, index) => {
-        const actual = reassessmentResponses?.[index];
-        if (actual && normalizeAnswer(actual) === normalizeAnswer(expected)) {
-          correct += 1;
-        }
-      });
-    }
-    const gain = MASTERY_STEP * (correct / total);
-    masteryAfter = Math.round(Math.min(1, masteryBefore + gain) * 1000) / 1000;
+    if (!result.ok) return jsonError(result.error, result.status);
   }
+
+  const state = await computeLearnerProfile(stored.sessionId);
+  const byTopic = state.learnerProfile.byTopic;
+
+  const masteryBefore = intervention.masteryBefore;
+  const masteryAfter =
+    intervention.masteryAfter ??
+    Math.round((byTopic[intervention.topic]?.accuracy ?? masteryBefore) * 1000) /
+      1000;
   const improved = masteryAfter > masteryBefore;
 
-  await db.orm.Intervention.where({ id: intervention.id }).update({
-    completedAt: new Date(),
-    masteryAfter,
-    improved: improved ? 1 : 0,
-  });
-
-  // Next priority: recompute scores with the improved topic, excluding it.
-  const profileRow = await db.orm.LearnerProfile.where({
-    studentId: intervention.studentId,
-  }).first();
-  let nextPriorityTopic: string | null = null;
-  if (profileRow) {
-    const byTopic = JSON.parse(profileRow.byTopicJson) as Record<
-      string,
-      TopicProfile
-    >;
-    if (byTopic[intervention.topic]) {
-      byTopic[intervention.topic].accuracy = masteryAfter;
-    }
-    nextPriorityTopic =
-      Object.entries(byTopic)
-        .filter(([topic]) => topic !== intervention.topic)
-        .sort(
-          (a, b) =>
-            (1 - b[1].accuracy) * getTopicImpactWeight(b[0]) -
-            (1 - a[1].accuracy) * getTopicImpactWeight(a[0]),
-        )[0]?.[0] ?? null;
+  if (!intervention.completedAt) {
+    await db.orm.Intervention.where({ id: intervention.id }).update({
+      completedAt: new Date(),
+      masteryAfter,
+      improved: improved ? 1 : 0,
+    });
   }
 
-  const payload = {
+  const payload: InterventionVerifyResponse = {
     masteryBefore,
     masteryAfter,
     improved,
-    nextPriorityTopic,
+    nextPriorityTopic: nextPriorityTopic(byTopic, intervention.topic),
   };
   return NextResponse.json(payload);
 }

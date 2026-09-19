@@ -86,11 +86,11 @@ describe("inferMasterySignal", () => {
     expect(inferMasterySignal(false, "low")).toBe("gap");
   });
 
-  it("correct + medium weakens to slight-up", () => {
-    expect(inferMasterySignal(true, "medium")).toBe("slight-up");
+  it("correct + medium is up", () => {
+    expect(inferMasterySignal(true, "medium")).toBe("up");
   });
 
-  it("wrong + medium weakens to gap", () => {
-    expect(inferMasterySignal(false, "medium")).toBe("gap");
+  it("wrong + medium is flag", () => {
+    expect(inferMasterySignal(false, "medium")).toBe("flag");
   });
 });

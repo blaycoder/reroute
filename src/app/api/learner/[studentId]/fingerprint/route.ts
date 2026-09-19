@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
+import { pickPriorityTopic } from "@/lib/compute-profile";
 import { db } from "@/lib/db";
 import { jsonError } from "@/lib/http";
+import type { FingerprintResponse } from "@/types/api";
 import type {
-  FingerprintResponse,
-  LearnerProfileSummary,
-} from "@/types/api";
-import type { InterventionRecord, TopicProfile } from "@/types/learner-state";
+  HeadlineDiagnosis,
+  InterventionRecord,
+  LearnerState,
+  TopicProfile,
+} from "@/types/learner-state";
 
-// Returns the learner's most recent misconception fingerprint.
+// Returns the learner's fingerprint, read from the profile computed out of
+// their own attempts (see computeLearnerProfile). Nothing here is seeded.
 export async function GET(
   _request: Request,
   { params }: { params: { studentId: string } },
@@ -22,12 +26,7 @@ export async function GET(
     );
   }
 
-  const overall = JSON.parse(row.overallJson) as LearnerProfileSummary["overall"];
   const byTopic = JSON.parse(row.byTopicJson) as Record<string, TopicProfile>;
-  const priorityTopic =
-    Object.entries(byTopic).sort(
-      (a, b) => b[1].priorityScore - a[1].priorityScore,
-    )[0]?.[0] ?? null;
 
   // Only finished sessions: generate creates a row up front, so abandoned or
   // reloaded sessions would otherwise appear as bogus "Not yet 0% → 0%" entries.
@@ -48,12 +47,15 @@ export async function GET(
   }));
 
   const payload: FingerprintResponse = {
-    overall,
+    overall: JSON.parse(row.overallJson) as LearnerState["learnerProfile"]["overall"],
     byTopic,
     readinessIndex: row.readinessIndex,
     profileConfidence: row.profileConfidence,
-    priorityTopic,
+    priorityTopic: pickPriorityTopic(byTopic),
     interventionHistory,
+    headlineDiagnosis: row.headlineDiagnosisJson
+      ? (JSON.parse(row.headlineDiagnosisJson) as HeadlineDiagnosis)
+      : null,
   };
   return NextResponse.json(payload);
 }

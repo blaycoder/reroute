@@ -9,8 +9,7 @@
     "lint": "next lint",
     "test": "vitest run",
     "emit": "npx prisma@8.0.0-rc.15 contract emit",
-    "db:init": "npx prisma@8.0.0-rc.15 db init",
-    "seed": "tsx scripts/seed.ts"
+    "db:init": "npx prisma@8.0.0-rc.15 db init"
   },
   "dependencies": {
     "@prisma/orm-sqlite": "^8.0.0-rc.11",
