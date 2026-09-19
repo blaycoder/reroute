@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Storage mirror of src/types. Structured fields that SQLite can't express
+// natively (JSON shapes, enums) are stored as serialized JSON strings or
+// plain strings — same shape works when the provider flips to Postgres.
+// Attempt.questionId deliberately has no FK relation: the question bank's
+// source of truth is src/data/questions.json, and attempts must survive
+// question edits.
+
+model Student {
+  id            String             @id @default(cuid())
+  name          String?
+  targetExam    String             @default("JAMB")
+  targetScore   Int
+  subjects      String // JSON array
+  createdAt     DateTime           @default(now())
+  attempts      Attempt[]
+  interventions Intervention[]
+  profile       LearnerProfile?
+  sessions      DiagnosticSession[]
+}
+
+model DiagnosticSession {
+  id          String    @id @default(cuid())
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id])
+  subject     String
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+model Question {
+  id                   String @id
+  subject              String
+  topic                String
+  subtopic             String
+  concept              String
+  difficulty           String // 'easy' | 'medium' | 'hard'
+  estimatedTimeSeconds Int
+  questionText         String
+  optionsJson          String // Record<string, string>
+  correctOption        String
+  distractorsJson      String // Distractor[]
+  explanation          String
+
+  @@index([topic])
+}
+
+model Attempt {
+  id                    String   @id @default(cuid())
+  studentId             String
+  student               Student  @relation(fields: [studentId], references: [id])
+  questionId            String
+  diagnosticId          String
+  selectedOption        String
+  correct               Boolean
+  responseTimeSeconds   Int
+  inferredConfidence    String // Confidence
+  inferredMasterySignal String // 'up' | 'slight-up' | 'flag' | 'gap'
+  telemetryJson         String // AttemptTelemetry
+  createdAt             DateTime @default(now())
+
+  @@index([studentId])
+  @@index([diagnosticId])
+}
+
+model LearnerProfile {
+  id                String   @id @default(cuid())
+  studentId         String   @unique
+  student           Student  @relation(fields: [studentId], references: [id])
+  overallJson       String // LearnerState['learnerProfile']['overall']
+  byTopicJson       String // Record<string, TopicProfile>
+  readinessIndex    Int
+  profileConfidence Float
+  updatedAt         DateTime @updatedAt
+}
+
+model Intervention {
+  id             String    @id @default(cuid())
+  studentId      String
+  student        Student   @relation(fields: [studentId], references: [id])
+  topic          String
+  actionType     String // 'intervention' | 'practice' | 'reassess'
+  contentJson    String // Intervention (src/types/api.ts)
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  masteryBefore  Float
+  masteryAfter   Float?
+  improved       Boolean?
+
+  @@index([studentId])
+}
