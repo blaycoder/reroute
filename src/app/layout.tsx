@@ -17,9 +17,9 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Reroot — Diagnosis-first JAMB Mathematics",
+  title: "Reroute — Diagnosis-first JAMB Mathematics",
   description:
-    "Reroot finds the root misconception behind every wrong answer, then teaches the fix.",
+    "Reroute finds the root misconception behind every wrong answer, then teaches the fix.",
 };
 
 export default function RootLayout({

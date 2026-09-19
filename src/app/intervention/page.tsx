@@ -13,9 +13,9 @@ import type {
 } from "@/types/api";
 import type { Confidence, ErrorType } from "@/types/learner-state";
 
-// Reads sessionStorage "reroot.intervention" (written by /fingerprint),
+// Reads sessionStorage "reroute.intervention" (written by /fingerprint),
 // merges the generate response back in for /practice.
-const INTERVENTION_KEY = "reroot.intervention";
+const INTERVENTION_KEY = "reroute.intervention";
 
 interface StoredIntervention {
   studentId: string;
@@ -148,7 +148,7 @@ export default function InterventionPage() {
     <main className="flex min-h-screen flex-col bg-background px-lg pb-xl pt-xl">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <p className="font-heading text-h3 font-bold text-textPrimary">
-          Reroot<span className="text-primary">.</span>
+          Reroute<span className="text-primary">.</span>
         </p>
         <h1 className="mt-xl font-heading text-h1 font-semibold leading-tight text-textPrimary">
           Let&apos;s fix {generate.conceptLabel}.

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { normalizeAnswer } from "@/lib/answer-normalize";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 import { jsonError, parseBody } from "@/lib/http";
 import type { FallbackPracticeItem } from "@/data/fallback-interventions";
 
@@ -24,8 +24,8 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const intervention = await prisma.intervention.findUnique({
-    where: { id: body.data.interventionId },
+  const intervention = await db.orm.Intervention.first({
+    id: body.data.interventionId,
   });
   if (!intervention) return jsonError("Intervention not found", 404);
 

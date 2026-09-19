@@ -9,9 +9,9 @@ import { apiFetch, isDemoMode } from "@/lib/api-client";
 import { cn, FOCUS_RING } from "@/design/utils";
 import type { DiagnosticStartResponse } from "@/types/api";
 
-// Hands off to /diagnostic via sessionStorage key "reroot.diagnostic":
+// Hands off to /diagnostic via sessionStorage key "reroute.diagnostic":
 // { studentId, diagnosticId, questions, targetScore }.
-const STORAGE_KEY = "reroot.diagnostic";
+const STORAGE_KEY = "reroute.diagnostic";
 
 const PILLARS = [
   {
@@ -41,7 +41,7 @@ export default function OnboardingPage() {
         "/api/diagnostic/start",
       );
       sessionStorage.setItem(
-        "reroot.diagnostic",
+        "reroute.diagnostic",
         JSON.stringify({ ...fixture, targetScore: 280 }),
       );
       router.replace("/diagnostic");
@@ -112,14 +112,14 @@ export default function OnboardingPage() {
       <main className="flex min-h-screen flex-col bg-background px-lg py-xl">
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
           <p className="font-heading text-h3 font-bold text-textPrimary">
-            Reroot<span className="text-primary">.</span>
+            Reroute<span className="text-primary">.</span>
           </p>
 
           <h1 className="mt-xl font-heading text-h1 font-semibold leading-tight text-textPrimary">
             Let&apos;s build your learning fingerprint.
           </h1>
           <p className="mt-md text-body leading-relaxed text-textMuted">
-            Most apps just give you a score. Reroot measures how you think —
+            Most apps just give you a score. Reroute measures how you think —
             tracking your accuracy, speed, and confidence across every topic.
           </p>
 
@@ -187,13 +187,13 @@ export default function OnboardingPage() {
               FOCUS_RING,
             )}
           >
-            Why Reroot?
+            Why Reroute?
           </button>
         </div>
 
         <dialog
           ref={dialogRef}
-          aria-labelledby="why-reroot-title"
+          aria-labelledby="why-reroute-title"
           onClick={(event) => {
             if (event.target === dialogRef.current) {
               dialogRef.current?.close();
@@ -202,10 +202,10 @@ export default function OnboardingPage() {
           className="w-full max-w-md rounded-md bg-surface p-xl text-left shadow-elevated backdrop:bg-textPrimary/40"
         >
           <h2
-            id="why-reroot-title"
+            id="why-reroute-title"
             className="font-heading text-h2 font-semibold text-textPrimary"
           >
-            Why Reroot?
+            Why Reroute?
           </h2>
           <ul className="mt-lg flex flex-col gap-md">
             {PILLARS.map((pillar) => (

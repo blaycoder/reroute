@@ -19,10 +19,10 @@ import type {
 } from "@/types/api";
 import type { AttemptTelemetry } from "@/types/learner-state";
 
-// Reads sessionStorage "reroot.diagnostic" (written by /onboarding) and
-// "reroot.fingerprint" (written for /fingerprint on completion).
-const DIAGNOSTIC_KEY = "reroot.diagnostic";
-const FINGERPRINT_KEY = "reroot.fingerprint";
+// Reads sessionStorage "reroute.diagnostic" (written by /onboarding) and
+// "reroute.fingerprint" (written for /fingerprint on completion).
+const DIAGNOSTIC_KEY = "reroute.diagnostic";
+const FINGERPRINT_KEY = "reroute.fingerprint";
 
 type StoredDiagnostic = DiagnosticStartResponse & { targetScore: number };
 

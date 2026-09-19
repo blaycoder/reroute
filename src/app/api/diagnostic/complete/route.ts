@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 import { jsonError, parseBody } from "@/lib/http";
 import { buildLearnerProfile } from "@/lib/profile-builder";
 import type { InterventionRecord } from "@/types/learner-state";
@@ -18,14 +18,14 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const session = await prisma.diagnosticSession.findUnique({
-    where: { id: body.data.diagnosticId },
+  const session = await db.orm.DiagnosticSession.first({
+    id: body.data.diagnosticId,
   });
   if (!session) return jsonError("Diagnostic session not found", 404);
 
-  const attemptCount = await prisma.attempt.count({
-    where: { diagnosticId: session.id },
-  });
+  const { attemptCount } = await db.orm.Attempt.where({
+    diagnosticId: session.id,
+  }).aggregate((aggregate) => ({ attemptCount: aggregate.count() }));
   if (attemptCount === 0) {
     return jsonError("No attempts recorded for this diagnostic", 404);
   }
@@ -33,9 +33,8 @@ export async function POST(request: Request) {
   const snapshot = await buildLearnerProfile(session.studentId);
 
   if (!session.completedAt) {
-    await prisma.diagnosticSession.update({
-      where: { id: session.id },
-      data: { completedAt: new Date() },
+    await db.orm.DiagnosticSession.where({ id: session.id }).update({
+      completedAt: new Date(),
     });
   }
 
@@ -43,12 +42,14 @@ export async function POST(request: Request) {
     (a, b) => b[1].priorityScore - a[1].priorityScore,
   )[0]?.[0];
 
-  const interventions = await prisma.intervention.findMany({
-    // Only finished sessions: generate creates a row up front, so abandoned or
-    // reloaded sessions would otherwise appear as bogus "Not yet 0% → 0%" entries.
-    where: { studentId: session.studentId, completedAt: { not: null } },
-    orderBy: { startedAt: "desc" },
-  });
+  // Only finished sessions: generate creates a row up front, so abandoned or
+  // reloaded sessions would otherwise appear as bogus "Not yet 0% → 0%" entries.
+  const interventions = await db.orm.Intervention.where({
+    studentId: session.studentId,
+  })
+    .where((intervention) => intervention.completedAt.isNotNull())
+    .orderBy((intervention) => intervention.startedAt.desc())
+    .all();
   const interventionHistory: InterventionRecord[] = interventions.map((i) => ({
     topic: i.topic,
     action: i.actionType,
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     completedAt: i.completedAt?.toISOString() ?? "",
     masteryBefore: i.masteryBefore,
     masteryAfter: i.masteryAfter ?? 0,
-    improved: i.improved ?? false,
+    improved: i.improved === 1,
   }));
 
   const payload: DiagnosticCompleteResponse = {

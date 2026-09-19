@@ -19,9 +19,9 @@ import type {
 } from "@/types/api";
 import type { ErrorType } from "@/types/learner-state";
 
-const DIAGNOSTIC_KEY = "reroot.diagnostic";
-const FINGERPRINT_KEY = "reroot.fingerprint";
-const INTERVENTION_KEY = "reroot.intervention";
+const DIAGNOSTIC_KEY = "reroute.diagnostic";
+const FINGERPRINT_KEY = "reroute.fingerprint";
+const INTERVENTION_KEY = "reroute.intervention";
 
 interface StoredComplete {
   learnerProfile: LearnerProfileSummary;
@@ -146,7 +146,7 @@ export default function FingerprintPage() {
     <main className="flex min-h-screen flex-col bg-background px-lg py-xl">
       <div className="mx-auto flex w-full max-w-md flex-col">
         <p className="font-heading text-h3 font-bold text-textPrimary">
-          Reroot<span className="text-primary">.</span>
+          Reroute<span className="text-primary">.</span>
         </p>
 
         <h1 className="mt-xl font-heading text-h1 font-semibold leading-tight text-textPrimary">

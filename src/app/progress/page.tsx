@@ -17,9 +17,9 @@ import type {
 } from "@/types/api";
 import type { ErrorType } from "@/types/learner-state";
 
-const DIAGNOSTIC_KEY = "reroot.diagnostic";
-const VERIFY_RESULT_KEY = "reroot.verifyResult";
-const INTERVENTION_KEY = "reroot.intervention";
+const DIAGNOSTIC_KEY = "reroute.diagnostic";
+const VERIFY_RESULT_KEY = "reroute.verifyResult";
+const INTERVENTION_KEY = "reroute.intervention";
 
 interface StoredVerifyResult {
   topic: string;
@@ -118,7 +118,7 @@ export default function ProgressPage() {
     <main className="flex min-h-screen flex-col bg-background px-lg py-xl">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <p className="font-heading text-h3 font-bold text-textPrimary">
-          Reroot<span className="text-primary">.</span>
+          Reroute<span className="text-primary">.</span>
         </p>
         <h1 className="mt-lg font-heading text-h1 font-semibold text-textPrimary">
           Your journey

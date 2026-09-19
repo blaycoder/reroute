@@ -4,7 +4,7 @@
 
 import { normalizeAnswer } from "@/lib/answer-normalize";
 
-const DEMO_KEY = "reroot.demo";
+const DEMO_KEY = "reroute.demo";
 
 const FIXTURES = {
   start: "/fallback/demo/diagnostic-start.json",
@@ -27,7 +27,7 @@ export function activateDemoMode(): void {
 
 export function resetDemoMode(): void {
   Object.keys(sessionStorage)
-    .filter((key) => key.startsWith("reroot."))
+    .filter((key) => key.startsWith("reroute."))
     .forEach((key) => sessionStorage.removeItem(key));
 }
 

@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { db, newId } from "@/lib/db";
 import {
   computeConfidenceCalibration,
   computeConsistency,
@@ -40,13 +40,14 @@ export interface LearnerProfileSnapshot {
 export async function buildLearnerProfile(
   studentId: string,
 ): Promise<LearnerProfileSnapshot> {
-  const rows = await prisma.attempt.findMany({
-    where: { studentId },
-    orderBy: { createdAt: "asc" },
-  });
-  const questions = await prisma.question.findMany({
-    select: { id: true, topic: true, estimatedTimeSeconds: true },
-  });
+  const rows = await db.orm.Attempt.where({ studentId })
+    .orderBy((attempt) => attempt.createdAt.asc())
+    .all();
+  const questions = await db.orm.Question.select(
+    "id",
+    "topic",
+    "estimatedTimeSeconds",
+  ).all();
   const metaById = new Map<string, QuestionMeta>(
     questions.map((q) => [
       q.id,
@@ -58,7 +59,7 @@ export async function buildLearnerProfile(
   const attempts: Attempt[] = rows.map((row) => ({
     questionId: row.questionId,
     selectedOption: row.selectedOption,
-    correct: row.correct,
+    correct: row.correct === 1,
     responseTimeSeconds: row.responseTimeSeconds,
     inferredConfidence: row.inferredConfidence as Confidence,
     inferredMasterySignal: row.inferredMasterySignal as Attempt["inferredMasterySignal"],
@@ -151,11 +152,18 @@ export async function buildLearnerProfile(
     byTopicJson: JSON.stringify(byTopic),
     readinessIndex,
     profileConfidence,
+    // Set explicitly rather than relying on @updatedAt semantics.
+    updatedAt: new Date(),
   };
-  await prisma.learnerProfile.upsert({
-    where: { studentId },
-    update: data,
-    create: { studentId, ...data },
+  // Not `.upsert()`: Prisma 8's upsert conflicts on the primary key, but this
+  // row is keyed by the unique `studentId` while `id` is generated per create.
+  await db.transaction(async (tx) => {
+    const existing = await tx.orm.LearnerProfile.where({ studentId }).first();
+    if (existing) {
+      await tx.orm.LearnerProfile.where({ studentId }).update(data);
+    } else {
+      await tx.orm.LearnerProfile.create({ id: newId(), studentId, ...data });
+    }
   });
 
   return { overall, byTopic, readinessIndex, profileConfidence };
