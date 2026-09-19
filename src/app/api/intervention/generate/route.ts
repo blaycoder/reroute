@@ -39,7 +39,7 @@ const contentSchema = z.object({
 });
 
 const SYSTEM_PROMPT = [
-  "You are Reroot's mathematics tutor for JAMB (Nigerian) students.",
+  "You are Reroute's mathematics tutor for JAMB (Nigerian) students.",
   "Teach to ONE specific misconception. Return STRICT JSON only — no markdown fences — matching exactly:",
   '{"explanation": string, "workedExample": string, "guidedQuestion": string, "guidedAnswer": string, "practice": [{"questionText": string, "options": {"A": string, "B": string, "C": string, "D": string}, "correctOption": "A"}], "reassessment": [same shape]}',
   "practice must have exactly 3 items; reassessment exactly 2 items testing the same skill with new numbers.",

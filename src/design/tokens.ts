@@ -1,4 +1,4 @@
-// Design tokens — the single source of truth for Reroot's visual system.
+// Design tokens — the single source of truth for Reroute's visual system.
 // Components consume tokens either directly (`import { tokens } from
 // "@/design/tokens"`, e.g. for Framer Motion curves) or via the Tailwind
 // utilities generated from them (see theme.ts). No raw hex/px/ms values

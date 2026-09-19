@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { apiFetch } from "@/lib/api-client";
 import type { InterventionGenerateResponse, PracticeItem } from "@/types/api";
 
-const INTERVENTION_KEY = "reroot.intervention";
+const INTERVENTION_KEY = "reroute.intervention";
 
 interface StoredIntervention {
   studentId: string;
@@ -144,7 +144,7 @@ export default function PracticePage() {
     <main className="flex min-h-screen flex-col bg-background px-lg pb-lg pt-xl">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <p className="font-heading text-h3 font-bold text-textPrimary">
-          Reroot<span className="text-primary">.</span>
+          Reroute<span className="text-primary">.</span>
         </p>
         <h1 className="mt-lg font-heading text-h2 font-semibold text-textPrimary">
           Prove it holds.

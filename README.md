@@ -1,6 +1,6 @@
-# Reroot
+# Reroute
 
-Diagnosis-first AI learning platform for JAMB Mathematics. Reroot doesn't just
+Diagnosis-first AI learning platform for JAMB Mathematics. Reroute doesn't just
 mark answers wrong — it traces each error to the underlying misconception,
 builds a "misconception fingerprint," and teaches the highest-leverage fix
 first.
