@@ -8,8 +8,7 @@ export default function MarketingPage() {
         Reroute
       </h1>
       <p className="mt-md max-w-md text-center text-body leading-relaxed text-textMuted">
-        Diagnosis-first AI learning for JAMB Mathematics. Placeholder — landing
-        page content comes with the design pass.
+        Diagnosis-first AI learning for JAMB Mathematics.
       </p>
       {/* A real link, not <Button>: Button renders a <button>, and navigation
           should stay a working anchor. Classes mirror Button's primary/lg style. */}
