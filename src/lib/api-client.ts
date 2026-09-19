@@ -1,152 +1,114 @@
-// Client-side API wrapper: demo mode resolves every call from pre-cached
-// fixtures (network-free); normal mode hits the real API and falls back to
-// the same fixtures when a call fails — the judge never sees a raw error.
+// Client-side API wrapper. It never invents data: a failed call throws, and the
+// screen decides what to show (a Retry button, and — after repeated failures —
+// a link to the student's own last saved response, if there is one).
+//
+// The "cache" holds only real responses this student's browser already
+// received, keyed by endpoint (and request body for POSTs). It is never
+// pre-seeded, so it can only ever replay the student's own data.
 
-import { normalizeAnswer } from "@/lib/answer-normalize";
+const CACHE_PREFIX = "reroute.cache.";
 
-const DEMO_KEY = "reroute.demo";
-
-const FIXTURES = {
-  start: "/fallback/demo/diagnostic-start.json",
-  complete: "/fallback/demo/diagnostic-complete.json",
-  fingerprint: "/fallback/demo/fingerprint.json",
-  intervention: "/fallback/demo/intervention.json",
-  verify: "/fallback/demo/verify.json",
-} as const;
-
-type FixtureName = keyof typeof FIXTURES;
-
-export function isDemoMode(): boolean {
-  if (typeof window === "undefined") return false;
-  return sessionStorage.getItem(DEMO_KEY) === "1";
+/** The server could not be reached, or failed (network error / 5xx). Retryable. */
+export class ApiUnavailableError extends Error {
+  constructor(
+    readonly path: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`The server could not be reached for ${path}`, options);
+    this.name = "ApiUnavailableError";
+  }
 }
 
-export function activateDemoMode(): void {
-  sessionStorage.setItem(DEMO_KEY, "1");
+/** The server understood the request and refused it (4xx). Retrying will not help. */
+export class ApiRejectedError extends Error {
+  constructor(
+    readonly path: string,
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiRejectedError";
+  }
 }
 
-export function resetDemoMode(): void {
-  Object.keys(sessionStorage)
-    .filter((key) => key.startsWith("reroute."))
-    .forEach((key) => sessionStorage.removeItem(key));
+export interface ApiFetchOptions {
+  /**
+   * Save the successful response so it can be replayed if the server later
+   * becomes unreachable. Only for reads and idempotent requests — never for
+   * answers, which the server must grade.
+   */
+  cache?: boolean;
 }
 
-export type ApiFallbackState = "live" | "cached";
-
-let fallbackState: ApiFallbackState = "live";
-const listeners = new Set<(state: ApiFallbackState) => void>();
-
-function setFallbackState(state: ApiFallbackState): void {
-  if (fallbackState === state) return;
-  fallbackState = state;
-  listeners.forEach((listener) => listener(state));
+interface CacheEntry<T> {
+  savedAt: string;
+  data: T;
 }
 
-export function getFallbackState(): ApiFallbackState {
-  return fallbackState;
+function cacheKey(path: string, body?: unknown): string {
+  return body === undefined
+    ? `${CACHE_PREFIX}${path}`
+    : `${CACHE_PREFIX}${path}#${JSON.stringify(body)}`;
 }
 
-export function subscribeFallback(
-  listener: (state: ApiFallbackState) => void,
-): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-const fixtureCache = new Map<FixtureName, unknown>();
-
-async function loadFixture(name: FixtureName): Promise<unknown> {
-  if (!fixtureCache.has(name)) {
-    const res = await fetch(FIXTURES[name]);
-    if (!res.ok) throw new Error(`Missing fixture: ${FIXTURES[name]}`);
-    fixtureCache.set(name, await res.json());
-  }
-  return fixtureCache.get(name);
-}
-
-interface DemoStartFixture {
-  demo: { answers: Record<string, string> };
-}
-
-interface DemoInterventionFixture {
-  demo: {
-    guidedAnswer: string;
-    guidedHint: string | null;
-    practiceLetters: string[];
-  };
-}
-
-async function resolveFromFixture<T>(
-  path: string,
-  body: unknown,
-  fromFailure: boolean,
-): Promise<T> {
-  if (fromFailure) setFallbackState("cached");
-
-  if (path === "/api/diagnostic/start") {
-    return loadFixture("start") as Promise<T>;
-  }
-  if (path === "/api/diagnostic/answer") {
-    // Grading runs client-side in demo/fallback mode — the fixture carries
-    // the key for this explicitly-labeled demo dataset only.
-    const fixture = (await loadFixture("start")) as DemoStartFixture;
-    const request = body as { questionId: string; selectedOption: string };
-    const expected = fixture.demo.answers[request.questionId];
-    return {
-      recorded: true,
-      correct:
-        expected !== undefined &&
-        normalizeAnswer(request.selectedOption) ===
-          normalizeAnswer(expected),
-    } as T;
-  }
-  if (path === "/api/diagnostic/complete") {
-    return loadFixture("complete") as Promise<T>;
-  }
-  if (path.startsWith("/api/learner/")) {
-    return loadFixture("fingerprint") as Promise<T>;
-  }
-  if (path === "/api/intervention/generate") {
-    return loadFixture("intervention") as Promise<T>;
-  }
-  if (path === "/api/intervention/check-guided") {
-    const fixture = (await loadFixture(
-      "intervention",
-    )) as DemoInterventionFixture;
-    const request = body as { guidedResponse: string };
-    return {
-      graded: true,
-      correct:
-        normalizeAnswer(request.guidedResponse) ===
-        normalizeAnswer(fixture.demo.guidedAnswer),
-      hint: fixture.demo.guidedHint,
-    } as T;
-  }
-  if (path === "/api/intervention/check-practice") {
-    const fixture = (await loadFixture(
-      "intervention",
-    )) as DemoInterventionFixture;
-    const request = body as { index: number; selectedOption: string };
-    const expected = fixture.demo.practiceLetters[request.index];
-    return {
-      correct:
-        expected !== undefined &&
-        normalizeAnswer(request.selectedOption) ===
-          normalizeAnswer(expected),
-    } as T;
-  }
-  if (path === "/api/intervention/verify") {
-    return loadFixture("verify") as Promise<T>;
-  }
-  throw new Error(`No offline fallback for ${path}`);
-}
-
-export async function apiFetch<T>(path: string, body?: unknown): Promise<T> {
-  if (isDemoMode()) {
-    return resolveFromFixture<T>(path, body, false);
-  }
+function saveToCache<T>(key: string, data: T): void {
   try {
-    const res = await fetch(
+    const entry: CacheEntry<T> = { savedAt: new Date().toISOString(), data };
+    localStorage.setItem(key, JSON.stringify(entry));
+  } catch {
+    // Storage full or blocked: the cache is a convenience, never required.
+  }
+}
+
+/**
+ * Save a response you already have (e.g. the progress an answer returned) as
+ * the replay copy for a read endpoint, so "cached" stays as fresh as the last
+ * thing the student actually saw.
+ */
+export function cacheResponse<T>(path: string, data: T, body?: unknown): void {
+  saveToCache(cacheKey(path, body), data);
+}
+
+/** The student's last saved response for this exact request, or null. */
+export function readCached<T>(path: string, body?: unknown): T | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(path, body));
+    if (!raw) return null;
+    return (JSON.parse(raw) as CacheEntry<T>).data;
+  } catch {
+    return null;
+  }
+}
+
+/** Forget everything saved for this browser (used when starting over). */
+export function clearCache(): void {
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(CACHE_PREFIX))
+      .forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // Nothing to clear if storage is unavailable.
+  }
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const parsed = (await res.json()) as { error?: unknown };
+    if (typeof parsed.error === "string") return parsed.error;
+  } catch {
+    // Non-JSON error body.
+  }
+  return `The request failed (${res.status})`;
+}
+
+export async function apiFetch<T>(
+  path: string,
+  body?: unknown,
+  options: ApiFetchOptions = {},
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(
       path,
       body === undefined
         ? undefined
@@ -156,11 +118,16 @@ export async function apiFetch<T>(path: string, body?: unknown): Promise<T> {
             body: JSON.stringify(body),
           },
     );
-    if (!res.ok) throw new Error(`API responded ${res.status}`);
-    setFallbackState("live");
-    return (await res.json()) as T;
-  } catch {
-    // Offline / server failure: resolve from the pre-cached fixture.
-    return resolveFromFixture<T>(path, body, true);
+  } catch (cause) {
+    throw new ApiUnavailableError(path, { cause });
   }
+
+  if (res.status >= 500) throw new ApiUnavailableError(path);
+  if (!res.ok) {
+    throw new ApiRejectedError(path, res.status, await readErrorMessage(res));
+  }
+
+  const data = (await res.json()) as T;
+  if (options.cache) saveToCache(cacheKey(path, body), data);
+  return data;
 }

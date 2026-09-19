@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
-import { DemoBadge } from "@/components/ui/DemoBadge";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -31,7 +30,6 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} ${poppins.variable} antialiased`}>
         <ToastProvider>{children}</ToastProvider>
-        <DemoBadge />
       </body>
     </html>
   );

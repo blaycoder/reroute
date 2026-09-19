@@ -1,35 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  ApiRecovery,
+  SavedContentNotice,
+  useRetryCounter,
+} from "@/components/ui/ApiRecovery";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { apiFetch } from "@/lib/api-client";
+import { ApiUnavailableError, apiFetch, readCached } from "@/lib/api-client";
 import { InterventionPanel } from "@/components/intervention/InterventionPanel";
 import type {
   InterventionCheckGuidedResponse,
+  InterventionGenerateRequest,
   InterventionGenerateResponse,
 } from "@/types/api";
-import type { Confidence, ErrorType } from "@/types/learner-state";
 
 // Reads sessionStorage "reroute.intervention" (written by /fingerprint),
 // merges the generate response back in for /practice.
 const INTERVENTION_KEY = "reroute.intervention";
 
-interface StoredIntervention {
-  studentId: string;
-  topic: string;
-  errorType: ErrorType;
-  confidence: Confidence;
-}
+const GENERATE_PATH = "/api/intervention/generate";
 
 export default function InterventionPage() {
   const router = useRouter();
   const { showToast } = useToast();
 
   const [phase, setPhase] = useState<"booting" | "ready">("booting");
-  const [bootError, setBootError] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [usingSaved, setUsingSaved] = useState(false);
   const [generate, setGenerate] = useState<InterventionGenerateResponse | null>(
     null,
   );
@@ -38,6 +39,45 @@ export default function InterventionPage() {
     "correct" | "wrong" | "ungraded" | null
   >(null);
   const [hint, setHint] = useState<string | null>(null);
+  const retries = useRetryCounter();
+  const requestRef = useRef<InterventionGenerateRequest | null>(null);
+
+  const show = useCallback((data: InterventionGenerateResponse) => {
+    setGenerate(data);
+    const raw = sessionStorage.getItem(INTERVENTION_KEY);
+    const stored = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    sessionStorage.setItem(
+      INTERVENTION_KEY,
+      JSON.stringify({ ...stored, generate: data }),
+    );
+    setPhase("ready");
+  }, []);
+
+  const load = useCallback(
+    async (request: InterventionGenerateRequest) => {
+      setFailed(false);
+      try {
+        const data = await apiFetch<InterventionGenerateResponse>(
+          GENERATE_PATH,
+          request,
+          { cache: true },
+        );
+        setUsingSaved(false);
+        show(data);
+      } catch (error) {
+        if (error instanceof ApiUnavailableError) {
+          setFailed(true);
+          return;
+        }
+        showToast({
+          variant: "error",
+          message: "We couldn't load your lesson. Head back and try again.",
+        });
+        router.replace("/fingerprint");
+      }
+    },
+    [router, show, showToast],
+  );
 
   useEffect(() => {
     const raw = sessionStorage.getItem(INTERVENTION_KEY);
@@ -45,40 +85,33 @@ export default function InterventionPage() {
       router.replace("/fingerprint");
       return;
     }
-    const stored = JSON.parse(raw) as StoredIntervention;
+    const stored = JSON.parse(raw) as { studentId: string; topic: string };
+    requestRef.current = { studentId: stored.studentId, topic: stored.topic };
+    void load(requestRef.current);
+  }, [load, router]);
 
-    (async () => {
-      try {
-        const data = await apiFetch<InterventionGenerateResponse>(
-          "/api/intervention/generate",
-          {
-            studentId: stored.studentId,
-            topic: stored.topic,
-            errorType: stored.errorType,
-            confidence: stored.confidence,
-          },
-        );
-        setGenerate(data);
-        sessionStorage.setItem(
-          INTERVENTION_KEY,
-          JSON.stringify({ ...stored, generate: data }),
-        );
-        setPhase("ready");
-      } catch {
-        showToast({
-          variant: "error",
-          message:
-            "Couldn't load your session. Check your connection and try again.",
-        });
-        setBootError(true);
-      }
-    })();
-  }, [router, showToast]);
+  const resetRetries = retries.reset;
+  useEffect(() => {
+    if (!failed) resetRetries();
+  }, [failed, resetRetries]);
 
-  const handleRetryBoot = useCallback(() => {
-    setBootError(false);
-    window.location.reload();
-  }, []);
+  const handleRetry = () => {
+    retries.bump();
+    if (requestRef.current) void load(requestRef.current);
+  };
+
+  // The student's own last copy of this lesson, offered after repeated retries.
+  const savedLesson =
+    failed && requestRef.current
+      ? readCached<InterventionGenerateResponse>(GENERATE_PATH, requestRef.current)
+      : null;
+
+  const resumeFromSaved = () => {
+    if (!savedLesson) return;
+    setUsingSaved(true);
+    setFailed(false);
+    show(savedLesson);
+  };
 
   const handleGuidedSubmit = useCallback(
     async (response: string) => {
@@ -96,15 +129,6 @@ export default function InterventionPage() {
           data.graded ? (data.correct ? "correct" : "wrong") : "ungraded",
         );
         setHint(data.hint);
-        // Persist the guided response — verify needs it after practice.
-        const raw = sessionStorage.getItem(INTERVENTION_KEY);
-        if (raw) {
-          const stored = JSON.parse(raw);
-          sessionStorage.setItem(
-            INTERVENTION_KEY,
-            JSON.stringify({ ...stored, guidedResponse: response }),
-          );
-        }
       } catch {
         showToast({
           variant: "error",
@@ -117,32 +141,36 @@ export default function InterventionPage() {
     [generate, checking, showToast],
   );
 
-  if (phase === "booting") {
+  if (failed) {
     return (
-      <main
-        aria-busy={!bootError}
-        className="flex min-h-screen flex-col justify-center bg-background px-lg"
-      >
-        <div className="mx-auto flex w-full max-w-md flex-col gap-lg">
-          {!bootError && (
-            <>
-              <Skeleton variant="line" className="w-3/4" />
-              <Skeleton variant="line" />
-              <Skeleton variant="card" />
-              <Skeleton variant="line" />
-            </>
-          )}
-          {bootError && (
-            <Button size="lg" fullWidth onClick={handleRetryBoot}>
-              Try again
-            </Button>
-          )}
+      <main className="flex min-h-screen flex-col justify-center bg-background px-lg">
+        <div className="mx-auto w-full max-w-md">
+          <ApiRecovery
+            message="We couldn't load your lesson. Check your connection and try again."
+            retryCount={retries.count}
+            onRetry={handleRetry}
+            onUseCached={savedLesson ? resumeFromSaved : undefined}
+          />
         </div>
       </main>
     );
   }
 
-  if (!generate) return null;
+  if (phase === "booting" || !generate) {
+    return (
+      <main
+        aria-busy="true"
+        className="flex min-h-screen flex-col justify-center bg-background px-lg"
+      >
+        <div className="mx-auto flex w-full max-w-md flex-col gap-lg">
+          <Skeleton variant="line" className="w-3/4" />
+          <Skeleton variant="line" />
+          <Skeleton variant="card" />
+          <Skeleton variant="line" />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen flex-col bg-background px-lg pb-xl pt-xl">
@@ -153,6 +181,7 @@ export default function InterventionPage() {
         <h1 className="mt-xl font-heading text-h1 font-semibold leading-tight text-textPrimary">
           Let&apos;s fix {generate.conceptLabel}.
         </h1>
+        {usingSaved && <SavedContentNotice className="mt-md self-start" />}
 
         <InterventionPanel
           className="mt-xl"

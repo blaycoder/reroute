@@ -9,11 +9,20 @@ export interface PriorityCalloutProps {
   topic: string;
   misconception: string;
   reason: string;
-  /** 0–1, estimated impact on readiness. */
+  /** 0–1 priority score. Shown as a label — never as a promised score gain. */
   impact: number;
   actionLabel?: string;
   onAction: () => void;
   className?: string;
+}
+
+const HIGH_PRIORITY_FROM = 0.66;
+const MEDIUM_PRIORITY_FROM = 0.33;
+
+function priorityLabel(score: number): "high" | "medium" | "low" {
+  if (score >= HIGH_PRIORITY_FROM) return "high";
+  if (score >= MEDIUM_PRIORITY_FROM) return "medium";
+  return "low";
 }
 
 const OUT = cubicBezier(tokens.motion.easings.out);
@@ -65,7 +74,7 @@ export function PriorityCallout({
       <p className="mt-sm text-small leading-relaxed text-textMuted">{reason}</p>
       <div className="mt-lg flex items-center justify-between gap-md">
         <span className="rounded-pill bg-surfaceMuted px-sm py-1 text-micro font-semibold text-success">
-          +{Math.round(impact * 100)} pts readiness
+          Priority: {priorityLabel(impact)}
         </span>
         <Button onClick={onAction}>{actionLabel}</Button>
       </div>

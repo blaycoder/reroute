@@ -1,31 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ApiRecovery, useRetryCounter } from "@/components/ui/ApiRecovery";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { apiFetch, isDemoMode } from "@/lib/api-client";
+import {
+  ApiUnavailableError,
+  apiFetch,
+  cacheResponse,
+  clearCache,
+} from "@/lib/api-client";
 import { cn, FOCUS_RING } from "@/design/utils";
 import type { DiagnosticStartResponse } from "@/types/api";
 
 // Hands off to /diagnostic via sessionStorage key "reroute.diagnostic":
-// { studentId, diagnosticId, questions, targetScore }.
+// { studentId, diagnosticId, targetScore }. The questions themselves are
+// fetched one at a time by the diagnostic.
 const STORAGE_KEY = "reroute.diagnostic";
 
+// These three sentences appear word for word on the fingerprint screen too.
 const PILLARS = [
-  {
-    name: "Accuracy",
-    line: "How often you get questions right, topic by topic.",
-  },
+  { name: "Accuracy", line: "How often you get it right." },
   {
     name: "Speed",
-    line: "How long each question takes you, compared with a comfortable pace.",
+    line: "How quickly you solve, compared to the expected time.",
   },
-  {
-    name: "Confidence Calibration",
-    line: "How well your certainty matches your results.",
-  },
+  { name: "Confidence Calibration", line: "Whether you know what you know." },
 ] as const;
 
 export default function OnboardingPage() {
@@ -33,24 +35,11 @@ export default function OnboardingPage() {
   const { showToast } = useToast();
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // Demo mode: seed the pre-cached diagnostic and skip straight in.
-  useEffect(() => {
-    if (!isDemoMode()) return;
-    void (async () => {
-      const fixture = await apiFetch<DiagnosticStartResponse>(
-        "/api/diagnostic/start",
-      );
-      sessionStorage.setItem(
-        "reroute.diagnostic",
-        JSON.stringify({ ...fixture, targetScore: 280 }),
-      );
-      router.replace("/diagnostic");
-    })();
-  }, [router]);
-
   const [targetScore, setTargetScore] = useState("");
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const retries = useRetryCounter();
 
   const parsedScore = Number(targetScore);
   const isValid =
@@ -62,29 +51,62 @@ export default function OnboardingPage() {
 
   const openModal = () => dialogRef.current?.showModal();
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (submitting || !isValid) return;
+  const startDiagnostic = useCallback(async () => {
     setSubmitting(true);
+    setFailed(false);
     try {
       const data = await apiFetch<DiagnosticStartResponse>(
         "/api/diagnostic/start",
         { targetScore: parsedScore, subject: "Mathematics" },
       );
+      // A new student starts clean: nothing saved for anyone else carries over.
+      clearCache();
+      cacheResponse(`/api/diagnostic/${data.diagnosticId}`, data);
       sessionStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ ...data, targetScore: parsedScore }),
+        JSON.stringify({
+          studentId: data.studentId,
+          diagnosticId: data.diagnosticId,
+          targetScore: parsedScore,
+        }),
       );
       router.push("/diagnostic");
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiUnavailableError) {
+        setFailed(true);
+        setSubmitting(false);
+        return;
+      }
       showToast({
         variant: "error",
-        message:
-          "Couldn't start the diagnostic. Check your connection and try again.",
+        message: "We couldn't start your diagnostic. Please try again.",
       });
       setSubmitting(false);
     }
+  }, [parsedScore, router, showToast]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submitting || !isValid) return;
+    await startDiagnostic();
   };
+
+  if (failed && !submitting) {
+    return (
+      <main className="flex min-h-screen flex-col justify-center bg-background px-lg">
+        <div className="mx-auto w-full max-w-md">
+          <ApiRecovery
+            message="We couldn't start your diagnostic. Check your connection and try again."
+            retryCount={retries.count}
+            onRetry={() => {
+              retries.bump();
+              void startDiagnostic();
+            }}
+          />
+        </div>
+      </main>
+    );
+  }
 
   if (submitting) {
     return (

@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  ApiRecovery,
+  SavedContentNotice,
+  useRetryCounter,
+} from "@/components/ui/ApiRecovery";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { apiFetch } from "@/lib/api-client";
+import { ApiUnavailableError, apiFetch, readCached } from "@/lib/api-client";
 import { BeforeAfterBar } from "@/components/fingerprint/BeforeAfterBar";
 import { NextPriorityCard } from "@/components/fingerprint/NextPriorityCard";
 import { cn } from "@/design/utils";
 import { tokens } from "@/design/tokens";
-import type {
-  DiagnosticStartResponse,
-  FingerprintResponse,
-} from "@/types/api";
-import type { ErrorType } from "@/types/learner-state";
+import type { FingerprintResponse } from "@/types/api";
 
 const DIAGNOSTIC_KEY = "reroute.diagnostic";
 const VERIFY_RESULT_KEY = "reroute.verifyResult";
@@ -45,51 +46,116 @@ export default function ProgressPage() {
     null,
   );
 
+  const [failed, setFailed] = useState(false);
+  const [usingSaved, setUsingSaved] = useState(false);
+  const retries = useRetryCounter();
+  const contextRef = useRef<{
+    studentId: string;
+    targetScore: number;
+    verifyResult: StoredVerifyResult;
+  } | null>(null);
+
+  const fingerprintPath = (id: string) => `/api/learner/${id}/fingerprint`;
+
+  const showFingerprint = useCallback(
+    (data: FingerprintResponse, saved: boolean) => {
+      const context = contextRef.current;
+      if (!context) return;
+      setTargetScore(context.targetScore);
+      setStudentId(context.studentId);
+      setVerifyResult(context.verifyResult);
+      setFingerprint(data);
+      setUsingSaved(saved);
+      setFailed(false);
+      setPhase("ready");
+    },
+    [],
+  );
+
+  const load = useCallback(async () => {
+    const context = contextRef.current;
+    if (!context) return;
+    setFailed(false);
+    try {
+      const data = await apiFetch<FingerprintResponse>(
+        fingerprintPath(context.studentId),
+        undefined,
+        { cache: true },
+      );
+      showFingerprint(data, false);
+    } catch (error) {
+      if (error instanceof ApiUnavailableError) {
+        setFailed(true);
+        return;
+      }
+      showToast({
+        variant: "error",
+        message: "Couldn't load your progress. Check your connection and try again.",
+      });
+      router.replace("/fingerprint");
+    }
+  }, [router, showFingerprint, showToast]);
+
   useEffect(() => {
     const diagnosticRaw = sessionStorage.getItem(DIAGNOSTIC_KEY);
     const verifyRaw = sessionStorage.getItem(VERIFY_RESULT_KEY);
     const diagnostic = diagnosticRaw
-      ? (JSON.parse(diagnosticRaw) as DiagnosticStartResponse & {
-          targetScore: number;
-        })
+      ? (JSON.parse(diagnosticRaw) as { studentId?: string; targetScore?: number })
       : null;
-    const storedStudentId = diagnostic?.studentId ?? null;
-    if (!verifyRaw || !diagnostic) {
+    if (!verifyRaw || !diagnostic?.studentId) {
       router.replace("/fingerprint");
       return;
     }
+    contextRef.current = {
+      studentId: diagnostic.studentId,
+      targetScore: diagnostic.targetScore ?? 0,
+      verifyResult: JSON.parse(verifyRaw) as StoredVerifyResult,
+    };
+    void load();
+  }, [load, router]);
 
-    apiFetch<FingerprintResponse>(`/api/learner/${storedStudentId}/fingerprint`)
-      .then((data) => {
-        setTargetScore(diagnostic.targetScore);
-        setStudentId(storedStudentId);
-        setVerifyResult(JSON.parse(verifyRaw) as StoredVerifyResult);
-        setFingerprint(data);
-        setPhase("ready");
-      })
-      .catch(() => {
-        showToast({
-          variant: "error",
-          message: "Couldn't load your progress. Check your connection and try again.",
-        });
-        router.replace("/fingerprint");
-      });
-  }, [router, showToast]);
+  const resetRetries = retries.reset;
+  useEffect(() => {
+    if (!failed) resetRetries();
+  }, [failed, resetRetries]);
+
+  const handleRetry = () => {
+    retries.bump();
+    void load();
+  };
+
+  // The student's own last copy of their progress, offered after repeated retries.
+  const savedFingerprint =
+    failed && contextRef.current
+      ? readCached<FingerprintResponse>(fingerprintPath(contextRef.current.studentId))
+      : null;
+
+  const resumeFromSaved = () => {
+    if (savedFingerprint) showFingerprint(savedFingerprint, true);
+  };
 
   const handleContinue = () => {
     if (!verifyResult?.nextPriorityTopic || !studentId || !fingerprint) return;
-    const nextProfile = fingerprint.byTopic[verifyResult.nextPriorityTopic];
     sessionStorage.setItem(
       INTERVENTION_KEY,
-      JSON.stringify({
-        studentId,
-        topic: verifyResult.nextPriorityTopic,
-        errorType: (nextProfile?.errorType ?? "conceptual") as ErrorType,
-        confidence: nextProfile?.confidence ?? "medium",
-      }),
+      JSON.stringify({ studentId, topic: verifyResult.nextPriorityTopic }),
     );
     router.push("/intervention");
   };
+
+  if (failed) {
+    return (
+      <main className="flex min-h-screen flex-col justify-center bg-background px-lg">
+        <div className="mx-auto w-full max-w-md">
+          <ApiRecovery
+            retryCount={retries.count}
+            onRetry={handleRetry}
+            onUseCached={savedFingerprint ? resumeFromSaved : undefined}
+          />
+        </div>
+      </main>
+    );
+  }
 
   if (phase === "booting") {
     return (
@@ -123,6 +189,7 @@ export default function ProgressPage() {
         <h1 className="mt-lg font-heading text-h1 font-semibold text-textPrimary">
           Your journey
         </h1>
+        {usingSaved && <SavedContentNotice className="mt-md self-start" />}
 
         <Card className="mt-xl">
           <div className="flex flex-col gap-md">

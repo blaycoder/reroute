@@ -1,233 +1,284 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
 import { ProgressHeader } from "@/components/assessment/ProgressHeader";
 import {
   QuestionCard,
   type QuestionCardOption,
+  type ReadTelemetry,
 } from "@/components/assessment/QuestionCard";
+import { Timer } from "@/components/assessment/Timer";
+import {
+  ApiRecovery,
+  SavedContentNotice,
+  useRetryCounter,
+} from "@/components/ui/ApiRecovery";
+import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { apiFetch } from "@/lib/api-client";
+import {
+  ApiRejectedError,
+  ApiUnavailableError,
+  apiFetch,
+  cacheResponse,
+  readCached,
+} from "@/lib/api-client";
 import type {
+  ClientTelemetry,
   DiagnosticAnswerResponse,
-  DiagnosticQuestionPreview,
-  DiagnosticStartResponse,
+  DiagnosticCompleteResponse,
+  DiagnosticProgress,
 } from "@/types/api";
-import type { AttemptTelemetry } from "@/types/learner-state";
 
-// Reads sessionStorage "reroute.diagnostic" (written by /onboarding) and
-// "reroute.fingerprint" (written for /fingerprint on completion).
+// The server routes this diagnostic: it sends one question at a time and picks
+// the next from this student's real answers. This page only shows the current
+// question, times it, and reports what the student did. A refresh resumes from
+// the last answered question because the state lives in the database.
+//
+// Reads sessionStorage "reroute.diagnostic" (written by /onboarding) and writes
+// "reroute.fingerprint" (the computed profile) when the diagnostic completes.
 const DIAGNOSTIC_KEY = "reroute.diagnostic";
 const FINGERPRINT_KEY = "reroute.fingerprint";
 
-type StoredDiagnostic = DiagnosticStartResponse & { targetScore: number };
-
-interface AnsweredQuestion {
+interface PendingAnswer {
   questionId: string;
-  topic: string;
-  correct: boolean;
+  selectedOption: string | null;
+  telemetry: ClientTelemetry;
 }
 
-type Phase = "booting" | "ready";
+type FailureKind = "load" | "submit" | "complete";
 
-const DIFFICULTY_RANK: Record<DiagnosticQuestionPreview["difficulty"], number> = {
-  easy: 0,
-  medium: 1,
-  hard: 2,
-};
+const progressPath = (diagnosticId: string) => `/api/diagnostic/${diagnosticId}`;
 
-// Adaptive sequencing (simple version): the client picks the order over the
-// batch. 2 questions per domain before any domain gets a 3rd; difficulty
-// target shifts ±1 after a domain's first pair, and the next question in that
-// domain is the remaining one closest to target.
-function pickTopic(pool: DiagnosticQuestionPreview[], answered: AnsweredQuestion[]): string | null {
-  const answeredIds = new Set(answered.map((a) => a.questionId));
-  const remaining = pool.filter((q) => !answeredIds.has(q.id));
-  if (remaining.length === 0) return null;
-
-  const firstSeen = new Map<string, number>();
-  pool.forEach((q, index) => {
-    if (!firstSeen.has(q.topic)) firstSeen.set(q.topic, index);
-  });
-
-  const topics = [...new Set(remaining.map((q) => q.topic))];
-  topics.sort((a, b) => {
-    const aCount = answered.filter((x) => x.topic === a).length;
-    const bCount = answered.filter((x) => x.topic === b).length;
-    const aTier = aCount < 2 ? 0 : 1;
-    const bTier = bCount < 2 ? 0 : 1;
-    if (aTier !== bTier) return aTier - bTier;
-    if (aCount !== bCount) return aCount - bCount;
-    return (firstSeen.get(a) ?? 0) - (firstSeen.get(b) ?? 0);
-  });
-  return topics[0];
-}
-
-function difficultyTarget(topic: string, answered: AnsweredQuestion[]): number {
-  const inTopic = answered.filter((a) => a.topic === topic);
-  if (inTopic.length < 2) return DIFFICULTY_RANK.medium;
-  const pair = inTopic.slice(0, 2);
-  if (pair.every((a) => a.correct)) return DIFFICULTY_RANK.hard;
-  if (pair.every((a) => !a.correct)) return DIFFICULTY_RANK.easy;
-  return DIFFICULTY_RANK.medium;
-}
-
-function pickQuestion(
-  pool: DiagnosticQuestionPreview[],
-  answered: AnsweredQuestion[],
-  topic: string,
-): DiagnosticQuestionPreview | null {
-  const answeredIds = new Set(answered.map((a) => a.questionId));
-  const target = difficultyTarget(topic, answered);
-  const remaining = pool
-    .map((q, index) => ({ q, index }))
-    .filter(({ q }) => q.topic === topic && !answeredIds.has(q.id));
-  remaining.sort((a, b) => {
-    const da = Math.abs(DIFFICULTY_RANK[a.q.difficulty] - target);
-    const db = Math.abs(DIFFICULTY_RANK[b.q.difficulty] - target);
-    if (da !== db) return da - db;
-    return a.index - b.index;
-  });
-  return remaining[0]?.q ?? null;
-}
-
-const EMPTY_SNAPSHOT: AttemptTelemetry = {
+const emptyTelemetry = (timedOut: boolean): ClientTelemetry => ({
   timeToFirstClickMs: 0,
   totalDwellTimeMs: 0,
+  timeOnQuestionMs: 0,
   optionSwitchCount: 0,
   hoverSequence: [],
   idleBeforeSubmitMs: 0,
   answerChanges: [],
-  wasSubmitted: true,
-};
+  wasSubmitted: false,
+  timedOut,
+});
+
+function rememberSession(progress: DiagnosticProgress): void {
+  const raw = sessionStorage.getItem(DIAGNOSTIC_KEY);
+  const previous = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+  sessionStorage.setItem(
+    DIAGNOSTIC_KEY,
+    JSON.stringify({
+      ...previous,
+      studentId: progress.studentId,
+      diagnosticId: progress.diagnosticId,
+    }),
+  );
+}
 
 export default function DiagnosticPage() {
   const router = useRouter();
   const { showToast } = useToast();
 
-  const [phase, setPhase] = useState<Phase>("booting");
-  const [pool, setPool] = useState<DiagnosticQuestionPreview[]>([]);
-  const [answered, setAnswered] = useState<AnsweredQuestion[]>([]);
+  const [progress, setProgress] = useState<DiagnosticProgress | null>(null);
+  const [phase, setPhase] = useState<"booting" | "ready" | "completing">("booting");
   const [selected, setSelected] = useState<string | null>(null);
-  const [snapshot, setSnapshot] = useState<AttemptTelemetry | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [completing, setCompleting] = useState(false);
-  const [completingError, setCompletingError] = useState(false);
+  const [failure, setFailure] = useState<FailureKind | null>(null);
+  const [usingSaved, setUsingSaved] = useState(false);
+  const retries = useRetryCounter();
 
+  const telemetryRef = useRef<ReadTelemetry | null>(null);
+  const submittingRef = useRef(false);
+  const pendingRef = useRef<PendingAnswer | null>(null);
   const diagnosticIdRef = useRef<string | null>(null);
-  const shownAtRef = useRef<number | null>(null);
-  const lastInteractionAtRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    const raw = sessionStorage.getItem(DIAGNOSTIC_KEY);
-    if (!raw) {
-      router.replace("/onboarding");
-      return;
-    }
-    const stored = JSON.parse(raw) as StoredDiagnostic;
-    diagnosticIdRef.current = stored.diagnosticId;
-    setPool(stored.questions);
-    setPhase("ready");
-  }, [router]);
+  const readTelemetry = (timedOut: boolean): ClientTelemetry =>
+    telemetryRef.current?.(timedOut) ?? emptyTelemetry(timedOut);
 
-  const topic = phase === "ready" ? pickTopic(pool, answered) : null;
-  const question = useMemo(
-    () => (topic ? pickQuestion(pool, answered, topic) : null),
-    [pool, answered, topic],
-  );
-  const index = answered.length + 1;
-  const total = pool.length;
-
-  // Per-question timers: reset whenever the question changes.
-  useEffect(() => {
-    if (phase === "ready" && question) {
-      shownAtRef.current = performance.now();
-      lastInteractionAtRef.current = null;
-    }
-  }, [phase, question]);
-
-  const handleSelect = useCallback(
-    (optionId: string, telemetry: AttemptTelemetry) => {
-      setSelected(optionId);
-      setSnapshot(telemetry);
-      lastInteractionAtRef.current = performance.now();
-    },
-    [],
-  );
-
-  const completeDiagnostic = useCallback(async () => {
-    setCompletingError(false);
+  const complete = useCallback(async () => {
+    const diagnosticId = diagnosticIdRef.current;
+    if (!diagnosticId) return;
+    setPhase("completing");
+    setFailure(null);
     try {
-      const data = await apiFetch("/api/diagnostic/complete", {
-        diagnosticId: diagnosticIdRef.current,
-      });
+      const data = await apiFetch<DiagnosticCompleteResponse>(
+        "/api/diagnostic/complete",
+        { diagnosticId },
+      );
       sessionStorage.setItem(FINGERPRINT_KEY, JSON.stringify(data));
       router.push("/fingerprint");
-    } catch {
-      setCompletingError(true);
+    } catch (error) {
+      if (error instanceof ApiUnavailableError) {
+        setFailure("complete");
+        return;
+      }
       showToast({
         variant: "error",
-        message: "Couldn't save your results. Check your connection and try again.",
+        message: "We couldn't finish your diagnostic. Let's start again.",
       });
+      router.replace("/onboarding");
     }
   }, [router, showToast]);
 
-  const handleNext = async () => {
-    if (!question || !selected || submitting) return;
-
-    const now = performance.now();
-    const shownAt = shownAtRef.current ?? now;
-    const lastInteraction = lastInteractionAtRef.current ?? shownAt;
-    const totalDwellTimeMs = Math.round(now - shownAt);
-    const telemetry: AttemptTelemetry = {
-      ...(snapshot ?? EMPTY_SNAPSHOT),
-      totalDwellTimeMs,
-      idleBeforeSubmitMs: Math.round(now - lastInteraction),
-      wasSubmitted: true,
-    };
-
-    setSubmitting(true);
-    try {
-      const data = await apiFetch<DiagnosticAnswerResponse>(
-        "/api/diagnostic/answer",
-        {
-          diagnosticId: diagnosticIdRef.current,
-          questionId: question.id,
-          selectedOption: selected,
-          // Clamp to 1s: the API rejects 0, and a sub-second answer would
-          // otherwise be dropped and never recorded.
-          responseTimeSeconds: Math.max(1, Math.round(totalDwellTimeMs / 1000)),
-          telemetry,
-        },
-      );
-
-      const updated = [
-        ...answered,
-        { questionId: question.id, topic: question.topic, correct: data.correct },
-      ];
-      setAnswered(updated);
+  const applyProgress = useCallback(
+    (next: DiagnosticProgress, source: "live" | "saved") => {
+      diagnosticIdRef.current = next.diagnosticId;
+      rememberSession(next);
+      pendingRef.current = null;
+      setProgress(next);
       setSelected(null);
-      setSnapshot(null);
-      setSubmitting(false);
-
-      if (updated.length >= pool.length) {
-        setCompleting(true);
-        await completeDiagnostic();
+      setUsingSaved(source === "saved");
+      if (next.completed) {
+        router.replace("/fingerprint");
+        return;
       }
-    } catch {
-      showToast({
-        variant: "error",
-        message: "Couldn't save your answer. Check your connection and try again.",
-      });
-      setSubmitting(false);
+      if (next.question === null) {
+        void complete();
+        return;
+      }
+      setPhase("ready");
+    },
+    [complete, router],
+  );
+
+  const load = useCallback(
+    async (diagnosticId: string) => {
+      setFailure(null);
+      try {
+        const data = await apiFetch<DiagnosticProgress>(
+          progressPath(diagnosticId),
+          undefined,
+          { cache: true },
+        );
+        applyProgress(data, "live");
+      } catch (error) {
+        if (error instanceof ApiUnavailableError) {
+          setFailure("load");
+          return;
+        }
+        router.replace("/onboarding"); // unknown session
+      }
+    },
+    [applyProgress, router],
+  );
+
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("session");
+    let diagnosticId = fromUrl;
+    if (!diagnosticId) {
+      const raw = sessionStorage.getItem(DIAGNOSTIC_KEY);
+      diagnosticId = raw
+        ? ((JSON.parse(raw) as { diagnosticId?: string }).diagnosticId ?? null)
+        : null;
     }
+    if (!diagnosticId) {
+      router.replace("/onboarding");
+      return;
+    }
+    diagnosticIdRef.current = diagnosticId;
+    void load(diagnosticId);
+  }, [load, router]);
+
+  const submit = useCallback(
+    async (answer: PendingAnswer) => {
+      const diagnosticId = diagnosticIdRef.current;
+      if (!diagnosticId || submittingRef.current) return;
+      submittingRef.current = true;
+      setSubmitting(true);
+      setFailure(null);
+      pendingRef.current = answer;
+      try {
+        const res = await apiFetch<DiagnosticAnswerResponse>(
+          "/api/diagnostic/answer",
+          { diagnosticId, ...answer },
+        );
+        // Keep the replay copy as fresh as the last thing the student saw.
+        cacheResponse(progressPath(diagnosticId), res.progress);
+        applyProgress(res.progress, "live");
+      } catch (error) {
+        if (error instanceof ApiUnavailableError) {
+          setFailure("submit");
+        } else if (error instanceof ApiRejectedError && error.status === 409) {
+          await load(diagnosticId); // this tab was out of step: resync
+        } else {
+          showToast({
+            variant: "error",
+            message: "We couldn't save that answer. Please try again.",
+          });
+        }
+      } finally {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
+    },
+    [applyProgress, load, showToast],
+  );
+
+  const resetRetries = retries.reset;
+  useEffect(() => {
+    if (failure === null) resetRetries();
+  }, [failure, resetRetries]);
+
+  const question = progress?.question ?? null;
+
+  const handleNext = () => {
+    if (!question || selected == null) return;
+    void submit({
+      questionId: question.id,
+      selectedOption: selected,
+      telemetry: readTelemetry(false),
+    });
   };
 
-  if (phase === "booting") {
+  // Time is up: send whatever is selected, or nothing if nothing is.
+  const handleExpire = () => {
+    if (!question || submittingRef.current) return;
+    void submit({
+      questionId: question.id,
+      selectedOption: selected,
+      telemetry: readTelemetry(true),
+    });
+  };
+
+  const handleRetry = () => {
+    retries.bump();
+    const diagnosticId = diagnosticIdRef.current;
+    if (!failure || !diagnosticId) return;
+    if (failure === "load") void load(diagnosticId);
+    else if (failure === "submit" && pendingRef.current) {
+      void submit(pendingRef.current);
+    } else if (failure === "complete") void complete();
+  };
+
+  // Only a read can be replayed from the student's own saved copy; an answer
+  // has to be graded by the server.
+  const savedProgress =
+    failure === "load" && diagnosticIdRef.current
+      ? readCached<DiagnosticProgress>(progressPath(diagnosticIdRef.current))
+      : null;
+
+  const resumeFromSaved = () => {
+    if (!savedProgress) return;
+    setFailure(null);
+    applyProgress(savedProgress, "saved");
+  };
+
+  if (failure === "load" || failure === "complete") {
+    return (
+      <main className="flex min-h-screen flex-col justify-center bg-background px-lg">
+        <div className="mx-auto w-full max-w-md">
+          <ApiRecovery
+            retryCount={retries.count}
+            onRetry={handleRetry}
+            onUseCached={savedProgress ? resumeFromSaved : undefined}
+          />
+        </div>
+      </main>
+    );
+  }
+
+  if (phase === "booting" || phase === "completing" || !progress || !question) {
     return (
       <main
         aria-busy="true"
@@ -241,31 +292,6 @@ export default function DiagnosticPage() {
     );
   }
 
-  if (completing) {
-    return (
-      <main
-        aria-busy={!completingError}
-        className="flex min-h-screen flex-col justify-center bg-background px-lg"
-      >
-        <div className="mx-auto flex w-full max-w-md flex-col gap-lg">
-          {!completingError && (
-            <>
-              <Skeleton variant="line" className="w-1/2" />
-              <Skeleton variant="card" />
-            </>
-          )}
-          {completingError && (
-            <Button size="lg" fullWidth onClick={() => void completeDiagnostic()}>
-              Try again
-            </Button>
-          )}
-        </div>
-      </main>
-    );
-  }
-
-  if (!question) return null;
-
   const options: QuestionCardOption[] = Object.entries(question.options).map(
     ([id, text]) => ({ id, text }),
   );
@@ -274,14 +300,19 @@ export default function DiagnosticPage() {
     <main className="flex min-h-screen flex-col bg-background px-lg pb-lg pt-xl">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <ProgressHeader
-          current={index}
-          total={total}
-          topicLabel={question.topic}
+          current={progress.answered + 1}
+          total={progress.total}
+          topicLabel={`${question.topic} · ${question.subtopic}`}
           onExit={() => router.push("/")}
+          timer={
+            <Timer
+              key={question.id}
+              totalSeconds={question.estimatedTimeSeconds}
+              onExpire={handleExpire}
+            />
+          }
         />
-        <p className="sr-only" aria-live="polite">
-          {`Question ${index} of ${total}, ${question.topic}`}
-        </p>
+        {usingSaved && <SavedContentNotice className="mt-md self-start" />}
         <QuestionCard
           key={question.id}
           className="mt-xl"
@@ -289,15 +320,28 @@ export default function DiagnosticPage() {
           options={options}
           selectedOption={selected}
           result={null}
-          disabled={submitting}
-          onSelect={handleSelect}
+          disabled={submitting || failure === "submit"}
+          onSelect={setSelected}
+          telemetryRef={telemetryRef}
         />
       </div>
+
       <div className="sticky bottom-0 mx-auto w-full max-w-md bg-background pb-lg pt-md">
-        {selected != null && (
-          <Button size="lg" fullWidth onClick={() => void handleNext()} disabled={submitting}>
-            {submitting && <Loader2 className="h-lg w-lg animate-spin" aria-hidden />}
-            {submitting ? "Saving…" : "Next"}
+        {failure === "submit" ? (
+          <ApiRecovery
+            message="We couldn't save your answer. Check your connection and try again."
+            retryCount={retries.count}
+            retrying={submitting}
+            onRetry={handleRetry}
+          />
+        ) : (
+          <Button
+            size="lg"
+            fullWidth
+            onClick={handleNext}
+            disabled={selected == null || submitting}
+          >
+            {progress.answered + 1 >= progress.total ? "Finish" : "Next"}
           </Button>
         )}
       </div>
