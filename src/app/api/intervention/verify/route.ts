@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { normalizeAnswer } from "@/lib/answer-normalize";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 import { getTopicImpactWeight } from "@/lib/mastery";
 import { jsonError, parseBody } from "@/lib/http";
 import type { InterventionContent } from "@/types/api";
@@ -39,8 +39,8 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const intervention = await prisma.intervention.findUnique({
-    where: { id: body.data.interventionId },
+  const intervention = await db.orm.Intervention.first({
+    id: body.data.interventionId,
   });
   if (!intervention) return jsonError("Intervention not found", 404);
 
@@ -86,15 +86,16 @@ export async function POST(request: Request) {
   }
   const improved = masteryAfter > masteryBefore;
 
-  await prisma.intervention.update({
-    where: { id: intervention.id },
-    data: { completedAt: new Date(), masteryAfter, improved },
+  await db.orm.Intervention.where({ id: intervention.id }).update({
+    completedAt: new Date(),
+    masteryAfter,
+    improved: improved ? 1 : 0,
   });
 
   // Next priority: recompute scores with the improved topic, excluding it.
-  const profileRow = await prisma.learnerProfile.findUnique({
-    where: { studentId: intervention.studentId },
-  });
+  const profileRow = await db.orm.LearnerProfile.where({
+    studentId: intervention.studentId,
+  }).first();
   let nextPriorityTopic: string | null = null;
   if (profileRow) {
     const byTopic = JSON.parse(profileRow.byTopicJson) as Record<

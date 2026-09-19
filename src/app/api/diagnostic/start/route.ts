@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { db, newId } from "@/lib/db";
 import { jsonError, parseBody } from "@/lib/http";
 import type {
   DiagnosticStartResponse,
@@ -24,35 +24,30 @@ export async function POST(request: Request) {
 
   let studentId: string;
   if (body.data.studentId) {
-    const existing = await prisma.student.findUnique({
-      where: { id: body.data.studentId },
-    });
+    const existing = await db.orm.Student.first({ id: body.data.studentId });
     if (!existing) return jsonError("Student not found", 404);
     const subjects = JSON.parse(existing.subjects) as string[];
-    const updated = await prisma.student.update({
-      where: { id: existing.id },
-      data: {
-        targetScore: body.data.targetScore,
-        subjects: JSON.stringify(
-          Array.from(new Set([...subjects, body.data.subject])),
-        ),
-      },
+    const updated = await db.orm.Student.where({ id: existing.id }).update({
+      targetScore: body.data.targetScore,
+      subjects: JSON.stringify(
+        Array.from(new Set([...subjects, body.data.subject])),
+      ),
     });
+    // update() returns null if the row vanished between the read and the write.
+    if (!updated) return jsonError("Student not found", 404);
     studentId = updated.id;
   } else {
-    const created = await prisma.student.create({
-      data: {
-        targetScore: body.data.targetScore,
-        subjects: JSON.stringify([body.data.subject]),
-      },
+    const created = await db.orm.Student.create({
+      id: newId(),
+      targetScore: body.data.targetScore,
+      subjects: JSON.stringify([body.data.subject]),
     });
     studentId = created.id;
   }
 
-  const questions = await prisma.question.findMany({
-    where: { subject: body.data.subject },
-    orderBy: { id: "asc" },
-  });
+  const questions = await db.orm.Question.where({ subject: body.data.subject })
+    .orderBy((question) => question.id.asc())
+    .all();
   if (questions.length === 0) {
     return jsonError(
       `No questions available for subject "${body.data.subject}"`,
@@ -60,8 +55,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const session = await prisma.diagnosticSession.create({
-    data: { studentId, subject: body.data.subject },
+  const session = await db.orm.DiagnosticSession.create({
+    id: newId(),
+    studentId,
+    subject: body.data.subject,
   });
 
   const payload: DiagnosticStartResponse = {

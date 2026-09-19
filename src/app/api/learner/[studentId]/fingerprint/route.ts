@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 import { jsonError } from "@/lib/http";
 import type {
   FingerprintResponse,
@@ -12,9 +12,9 @@ export async function GET(
   _request: Request,
   { params }: { params: { studentId: string } },
 ) {
-  const row = await prisma.learnerProfile.findUnique({
-    where: { studentId: params.studentId },
-  });
+  const row = await db.orm.LearnerProfile.where({
+    studentId: params.studentId,
+  }).first();
   if (!row) {
     return jsonError(
       "No learner profile yet — complete a diagnostic first",
@@ -29,12 +29,14 @@ export async function GET(
       (a, b) => b[1].priorityScore - a[1].priorityScore,
     )[0]?.[0] ?? null;
 
-  const interventions = await prisma.intervention.findMany({
-    // Only finished sessions: generate creates a row up front, so abandoned or
-    // reloaded sessions would otherwise appear as bogus "Not yet 0% → 0%" entries.
-    where: { studentId: params.studentId, completedAt: { not: null } },
-    orderBy: { startedAt: "desc" },
-  });
+  // Only finished sessions: generate creates a row up front, so abandoned or
+  // reloaded sessions would otherwise appear as bogus "Not yet 0% → 0%" entries.
+  const interventions = await db.orm.Intervention.where({
+    studentId: params.studentId,
+  })
+    .where((intervention) => intervention.completedAt.isNotNull())
+    .orderBy((intervention) => intervention.startedAt.desc())
+    .all();
   const interventionHistory: InterventionRecord[] = interventions.map((i) => ({
     topic: i.topic,
     action: i.actionType,
@@ -42,7 +44,7 @@ export async function GET(
     completedAt: i.completedAt?.toISOString() ?? "",
     masteryBefore: i.masteryBefore,
     masteryAfter: i.masteryAfter ?? 0,
-    improved: i.improved ?? false,
+    improved: i.improved === 1,
   }));
 
   const payload: FingerprintResponse = {

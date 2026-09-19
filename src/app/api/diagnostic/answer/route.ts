@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { db, newId } from "@/lib/db";
 import { jsonError, parseBody } from "@/lib/http";
 import { buildLearnerProfile } from "@/lib/profile-builder";
 import { inferConfidence, inferMasterySignal } from "@/lib/telemetry";
@@ -38,17 +38,15 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const session = await prisma.diagnosticSession.findUnique({
-    where: { id: body.data.diagnosticId },
+  const session = await db.orm.DiagnosticSession.first({
+    id: body.data.diagnosticId,
   });
   if (!session) return jsonError("Diagnostic session not found", 404);
   if (session.completedAt) {
     return jsonError("Diagnostic session already completed", 400);
   }
 
-  const question = await prisma.question.findUnique({
-    where: { id: body.data.questionId },
-  });
+  const question = await db.orm.Question.first({ id: body.data.questionId });
   if (!question) return jsonError("Question not found", 404);
 
   const options = JSON.parse(question.optionsJson) as Record<string, string>;
@@ -71,18 +69,17 @@ export async function POST(request: Request) {
     inferredConfidence,
   );
 
-  await prisma.attempt.create({
-    data: {
-      studentId: session.studentId,
-      questionId: question.id,
-      diagnosticId: session.id,
-      selectedOption: body.data.selectedOption,
-      correct,
-      responseTimeSeconds: Math.round(body.data.responseTimeSeconds),
-      inferredConfidence,
-      inferredMasterySignal,
-      telemetryJson: JSON.stringify(body.data.telemetry),
-    },
+  await db.orm.Attempt.create({
+    id: newId(),
+    studentId: session.studentId,
+    questionId: question.id,
+    diagnosticId: session.id,
+    selectedOption: body.data.selectedOption,
+    correct: correct ? 1 : 0,
+    responseTimeSeconds: Math.round(body.data.responseTimeSeconds),
+    inferredConfidence,
+    inferredMasterySignal,
+    telemetryJson: JSON.stringify(body.data.telemetry),
   });
 
   await buildLearnerProfile(session.studentId);

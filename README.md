@@ -12,7 +12,7 @@ diagnosis + prioritized next action), one loop —
 ## Stack
 
 Next.js 14 (App Router) · TypeScript · Tailwind CSS · Framer Motion · KaTeX ·
-Prisma 6 + SQLite (dev) / Postgres-ready (prod) · Zod · Vercel
+Prisma 8 (release candidate) + SQLite (dev) · Zod · Vercel
 
 ## Setup
 
@@ -22,11 +22,12 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-#    - DATABASE_URL is pre-set for local SQLite; add OPENAI_API_KEY or
+#    - SQLITE_PATH defaults to ./db/reroute.db; add OPENAI_API_KEY or
 #      ZHIPU_API_KEY when the intervention generator is built.
 
-# 3. Apply migrations + generate Prisma Client
-npx prisma migrate dev
+# 3. Create the database and load the question bank
+npm run db:init    # creates the tables from the contract
+npm run seed       # loads src/data/questions.json
 
 # 4. Run
 npm run dev        # http://localhost:3000
@@ -41,7 +42,9 @@ npm run dev        # http://localhost:3000
 | `npm start`         | Serve the production build       |
 | `npm run lint`      | ESLint                           |
 | `npm test`          | Vitest unit tests (logic layer)  |
-| `npx prisma studio` | Browse the SQLite database       |
+| `npm run emit`      | Re-emit `contract.json` / `contract.d.ts` after editing `contract.prisma` |
+| `npm run db:init`   | Create the database tables       |
+| `npm run seed`      | Replace the question bank        |
 
 ## Structure
 
@@ -65,7 +68,9 @@ src/
   design/               tokens.ts (source of truth) · theme.ts (Tailwind bridge) · utils.ts (cn · formatMath)
   types/                learner-state · question contracts
   data/                 questions · misconceptions · syllabus-excerpts · fallback-interventions (server-only answer keys)
-prisma/                 schema.prisma
+  prisma/               contract.prisma (source) · contract.json / contract.d.ts (emitted — commit, never edit)
+prisma.config.ts        Prisma 8 config (contract path, database path)
+scripts/                seed.ts
 public/fallback/        Offline fallback intervention payloads
 db/                     Local SQLite file (git-ignored)
 ```
@@ -78,9 +83,17 @@ and never hardcode hex/px/ms values in components. Use `cn()` and
 
 ## Notes
 
-- **Prisma major:** pinned to v6 — v7 removed `url = env("DATABASE_URL")`
-  from schema files (requires driver adapters + `prisma.config.ts`).
-- **Prod database:** flip `provider` in `prisma/schema.prisma` to
-  `postgresql`, point `DATABASE_URL` at Postgres, and run
-  `npx prisma migrate deploy`.- **react-katex** ships no types; a stub declaration lives in
+- **Prisma 8 is a release candidate** (`8.0.0-rc.N`), and a new RC may rename
+  or remove APIs — read each release's breaking-changes notes before bumping.
+  It is a different product from Prisma 6/7: a contract (`contract.prisma`)
+  instead of `schema.prisma`, `@prisma/orm-sqlite` instead of `@prisma/client`,
+  and `db.orm.<Model>` queries instead of `prisma.<model>.<op>`.
+- **Editing the schema:** change `src/prisma/contract.prisma`, run
+  `npm run emit`, and commit the regenerated `contract.json` / `contract.d.ts`
+  (the app imports them; there is no build-time emit step).
+- **Prod database:** the SQLite target does not persist on serverless hosts.
+  Production needs the Postgres target (`@prisma/orm-postgres`), where models
+  are addressed as `db.orm.public.<Model>` — every query in `src/` would need
+  that prefix. Not done yet.
+- **react-katex** ships no types; a stub declaration lives in
   `src/types/react-katex.d.ts`.

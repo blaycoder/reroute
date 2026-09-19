@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { db, newId } from "@/lib/db";
 import {
   getFallbackIntervention,
   type FallbackPracticeItem,
@@ -71,14 +71,12 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const student = await prisma.student.findUnique({
-    where: { id: body.data.studentId },
-  });
+  const student = await db.orm.Student.first({ id: body.data.studentId });
   if (!student) return jsonError("Student not found", 404);
 
-  const profileRow = await prisma.learnerProfile.findUnique({
-    where: { studentId: body.data.studentId },
-  });
+  const profileRow = await db.orm.LearnerProfile.where({
+    studentId: body.data.studentId,
+  }).first();
   const stored = (
     profileRow
       ? (JSON.parse(profileRow.byTopicJson) as Record<string, TopicProfile>)
@@ -159,21 +157,20 @@ export async function POST(request: Request) {
     };
   }
 
-  const intervention = await prisma.intervention.create({
-    data: {
-      studentId: body.data.studentId,
-      topic: body.data.topic,
-      actionType,
-      contentJson: JSON.stringify({
-        content,
-        answerKey,
-        source,
-        guidedHint: fallback.guidedHint,
-        practiceItems,
-        reassessmentItems,
-      }),
-      masteryBefore,
-    },
+  const intervention = await db.orm.Intervention.create({
+    id: newId(),
+    studentId: body.data.studentId,
+    topic: body.data.topic,
+    actionType,
+    contentJson: JSON.stringify({
+      content,
+      answerKey,
+      source,
+      guidedHint: fallback.guidedHint,
+      practiceItems,
+      reassessmentItems,
+    }),
+    masteryBefore,
   });
 
   const payload: InterventionGenerateResponse = {
