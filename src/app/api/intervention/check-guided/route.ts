@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const intervention = await db.orm.Intervention.first({
+  const intervention = await db.orm.public.Intervention.first({
     id: body.data.interventionId,
   });
   if (!intervention) return jsonError("Intervention not found", 404);

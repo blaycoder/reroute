@@ -14,7 +14,7 @@ const RECENT_HISTORY_LENGTH = 4;
  * Results are stored on the attempt, which makes re-running it a no-op.
  */
 export async function diagnoseWrongAnswers(sessionId: string): Promise<void> {
-  const rows = await db.orm.Attempt.where({
+  const rows = await db.orm.public.Attempt.where({
     diagnosticId: sessionId,
     purpose: "diagnostic",
   })
@@ -58,7 +58,7 @@ export async function diagnoseWrongAnswers(sessionId: string): Promise<void> {
         inferredConfidence: row.inferredConfidence as Confidence,
         recentAttempts: history,
       }).then(async (diagnosis) => {
-        await db.orm.Attempt.where({ id: row.id }).update({
+        await db.orm.public.Attempt.where({ id: row.id }).update({
           diagnosisJson: JSON.stringify(diagnosis),
         });
       }),

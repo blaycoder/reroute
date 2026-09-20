@@ -1,5 +1,5 @@
 import { getQuestion } from "@/data/question-bank";
-import { db, newId } from "@/lib/db";
+import { db, newId, nowIso } from "@/lib/db";
 import {
   computeConfidenceCalibration,
   computeConsistency,
@@ -48,12 +48,12 @@ interface AttemptRecord {
 export async function computeLearnerProfile(
   sessionId: string,
 ): Promise<LearnerState> {
-  const session = await db.orm.DiagnosticSession.first({ id: sessionId });
+  const session = await db.orm.public.DiagnosticSession.first({ id: sessionId });
   if (!session) throw new Error(`Diagnostic session not found: ${sessionId}`);
-  const student = await db.orm.Student.first({ id: session.studentId });
+  const student = await db.orm.public.Student.first({ id: session.studentId });
   if (!student) throw new Error(`Student not found: ${session.studentId}`);
 
-  const rows = await db.orm.Attempt.where({ diagnosticId: sessionId })
+  const rows = await db.orm.public.Attempt.where({ diagnosticId: sessionId })
     .orderBy((attempt) => attempt.createdAt.asc())
     .all();
 
@@ -72,7 +72,7 @@ export async function computeLearnerProfile(
         inferredMasterySignal:
           row.inferredMasterySignal as Attempt["inferredMasterySignal"],
         telemetry: JSON.parse(row.telemetryJson) as AttemptTelemetry,
-        timestamp: row.createdAt.toISOString(),
+        timestamp: row.createdAt,
       },
       topic: question?.topic ?? "Unknown",
       estimatedTimeSeconds: question?.estimatedTimeSeconds ?? 0,
@@ -150,7 +150,7 @@ export async function computeLearnerProfile(
 
   // Only finished sessions: generate creates a row up front, so abandoned or
   // reloaded sessions would otherwise appear as bogus "Not yet 0% → 0%" entries.
-  const interventions = await db.orm.Intervention.where({
+  const interventions = await db.orm.public.Intervention.where({
     studentId: session.studentId,
   })
     .where((intervention) => intervention.completedAt.isNotNull())
@@ -159,8 +159,8 @@ export async function computeLearnerProfile(
   const interventionHistory: InterventionRecord[] = interventions.map((i) => ({
     topic: i.topic,
     action: i.actionType,
-    startedAt: i.startedAt.toISOString(),
-    completedAt: i.completedAt?.toISOString() ?? "",
+    startedAt: i.startedAt,
+    completedAt: i.completedAt ?? "",
     masteryBefore: i.masteryBefore,
     masteryAfter: i.masteryAfter ?? 0,
     improved: i.improved === 1,
@@ -260,16 +260,16 @@ async function saveProfileCache(
       : null,
     readinessIndex: profile.readinessIndex,
     profileConfidence: profile.profileConfidence,
-    updatedAt: new Date(),
+    updatedAt: nowIso(),
   };
   // Not `.upsert()`: Prisma 8's upsert conflicts on the primary key, but this
   // row is keyed by the unique `studentId` while `id` is generated per create.
   await db.transaction(async (tx) => {
-    const existing = await tx.orm.LearnerProfile.where({ studentId }).first();
+    const existing = await tx.orm.public.LearnerProfile.where({ studentId }).first();
     if (existing) {
-      await tx.orm.LearnerProfile.where({ studentId }).update(data);
+      await tx.orm.public.LearnerProfile.where({ studentId }).update(data);
     } else {
-      await tx.orm.LearnerProfile.create({ id: newId(), studentId, ...data });
+      await tx.orm.public.LearnerProfile.create({ id: newId(), studentId, ...data });
     }
   });
 }

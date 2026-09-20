@@ -16,7 +16,7 @@ export async function GET(
   _request: Request,
   { params }: { params: { studentId: string } },
 ) {
-  const row = await db.orm.LearnerProfile.where({
+  const row = await db.orm.public.LearnerProfile.where({
     studentId: params.studentId,
   }).first();
   if (!row) {
@@ -30,7 +30,7 @@ export async function GET(
 
   // Only finished sessions: generate creates a row up front, so abandoned or
   // reloaded sessions would otherwise appear as bogus "Not yet 0% → 0%" entries.
-  const interventions = await db.orm.Intervention.where({
+  const interventions = await db.orm.public.Intervention.where({
     studentId: params.studentId,
   })
     .where((intervention) => intervention.completedAt.isNotNull())
@@ -39,8 +39,8 @@ export async function GET(
   const interventionHistory: InterventionRecord[] = interventions.map((i) => ({
     topic: i.topic,
     action: i.actionType,
-    startedAt: i.startedAt.toISOString(),
-    completedAt: i.completedAt?.toISOString() ?? "",
+    startedAt: i.startedAt,
+    completedAt: i.completedAt ?? "",
     masteryBefore: i.masteryBefore,
     masteryAfter: i.masteryAfter ?? 0,
     improved: i.improved === 1,

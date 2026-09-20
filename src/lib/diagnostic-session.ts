@@ -35,7 +35,7 @@ export function toQuestionPreview(question: Question): DiagnosticQuestionPreview
 export async function loadAnsweredQuestions(
   sessionId: string,
 ): Promise<AnsweredQuestion[]> {
-  const rows = await db.orm.Attempt.where({
+  const rows = await db.orm.public.Attempt.where({
     diagnosticId: sessionId,
     purpose: "diagnostic",
   })
@@ -64,7 +64,7 @@ export async function loadAnsweredQuestions(
 export async function getLatestSessionId(
   studentId: string,
 ): Promise<string | null> {
-  const session = await db.orm.DiagnosticSession.where({ studentId })
+  const session = await db.orm.public.DiagnosticSession.where({ studentId })
     .orderBy((s) => s.startedAt.desc())
     .first();
   return session?.id ?? null;
@@ -73,7 +73,7 @@ export async function getLatestSessionId(
 export async function loadProgress(
   sessionId: string,
 ): Promise<DiagnosticProgress | null> {
-  const session = await db.orm.DiagnosticSession.first({ id: sessionId });
+  const session = await db.orm.public.DiagnosticSession.first({ id: sessionId });
   if (!session) return null;
 
   const answered = await loadAnsweredQuestions(sessionId);

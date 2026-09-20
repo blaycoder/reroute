@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db, newId } from "@/lib/db";
+import { db, newId, nowIso } from "@/lib/db";
 import { diagnosticPool, loadProgress } from "@/lib/diagnostic-session";
 import { jsonError, parseBody } from "@/lib/http";
 import type { DiagnosticStartResponse } from "@/types/api";
@@ -29,10 +29,10 @@ export async function POST(request: Request) {
 
   let studentId: string;
   if (body.data.studentId) {
-    const existing = await db.orm.Student.first({ id: body.data.studentId });
+    const existing = await db.orm.public.Student.first({ id: body.data.studentId });
     if (!existing) return jsonError("Student not found", 404);
     const subjects = JSON.parse(existing.subjects) as string[];
-    const updated = await db.orm.Student.where({ id: existing.id }).update({
+    const updated = await db.orm.public.Student.where({ id: existing.id }).update({
       targetScore: body.data.targetScore,
       subjects: JSON.stringify(
         Array.from(new Set([...subjects, body.data.subject])),
@@ -42,18 +42,20 @@ export async function POST(request: Request) {
     if (!updated) return jsonError("Student not found", 404);
     studentId = updated.id;
   } else {
-    const created = await db.orm.Student.create({
+    const created = await db.orm.public.Student.create({
       id: newId(),
       targetScore: body.data.targetScore,
       subjects: JSON.stringify([body.data.subject]),
+      createdAt: nowIso(),
     });
     studentId = created.id;
   }
 
-  const session = await db.orm.DiagnosticSession.create({
+  const session = await db.orm.public.DiagnosticSession.create({
     id: newId(),
     studentId,
     subject: body.data.subject,
+    startedAt: nowIso(),
   });
 
   const progress = await loadProgress(session.id);

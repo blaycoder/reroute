@@ -12,7 +12,7 @@ diagnosis + prioritized next action), one loop —
 ## Stack
 
 Next.js 14 (App Router) · TypeScript · Tailwind CSS · Framer Motion · KaTeX ·
-Prisma 8 (release candidate) + SQLite (dev) · Zod · Vercel
+Prisma 8 (release candidate) + PostgreSQL · Zod · Vercel
 
 ## Setup
 
@@ -22,10 +22,13 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-#    - SQLITE_PATH defaults to ./db/reroute.db; add OPENAI_API_KEY or
-#      ZHIPU_API_KEY when the intervention generator is built.
+#    - DATABASE_URL: a Postgres connection string (the DIRECT one, for local
+#      work and migrations — see .env.example). Use a development database,
+#      not production.
+#    - OPENAI_API_KEY / ZHIPU_API_KEY are optional (AI diagnosis).
 
-# 3. Create the database tables from the contract
+# 3. Generate the typed client and create the tables
+npm run emit       # writes src/prisma/contract.json + contract.d.ts
 npm run db:init    # the question bank is code (src/data/question-bank.ts): nothing to seed
 
 # 4. Run
@@ -67,9 +70,9 @@ src/
   types/                learner-state · question contracts
   data/                 question-bank (40 questions + answer keys, server-only) · interventions (lesson content, no answers)
   prisma/               contract.prisma (source) · contract.json / contract.d.ts (emitted — commit, never edit)
-prisma.config.ts        Prisma 8 config (contract path, database path)
+prisma.config.ts        Prisma 8 config (contract path, DATABASE_URL)
+migrations/             Migration history (created by `migration plan`)
 public/fallback/        Per-concept lesson text + question ids (no answers)
-db/                     Local SQLite file (git-ignored)
 ```
 
 Design tokens live in `src/design/tokens.ts` and flow into Tailwind via
@@ -113,14 +116,33 @@ seeded profiles, demo students or scripted outcomes.
 - **Prisma 8 is a release candidate** (`8.0.0-rc.N`), and a new RC may rename
   or remove APIs — read each release's breaking-changes notes before bumping.
   It is a different product from Prisma 6/7: a contract (`contract.prisma`)
-  instead of `schema.prisma`, `@prisma/orm-sqlite` instead of `@prisma/client`,
-  and `db.orm.<Model>` queries instead of `prisma.<model>.<op>`.
+  instead of `schema.prisma`, `@prisma/orm-postgres` instead of `@prisma/client`,
+  and `db.orm.public.<Model>` queries instead of `prisma.<model>.<op>`.
 - **Editing the schema:** change `src/prisma/contract.prisma`, run
   `npm run emit`, and commit the regenerated `contract.json` / `contract.d.ts`
-  (the app imports them; there is no build-time emit step).
-- **Prod database:** the SQLite target does not persist on serverless hosts.
-  Production needs the Postgres target (`@prisma/orm-postgres`), where models
-  are addressed as `db.orm.public.<Model>` — every query in `src/` would need
-  that prefix. Not done yet.
+  (the app imports them; there is no build-time emit step, so Vercel's build
+  needs no Prisma CLI).
+- **Timestamps are ISO text, ids are app-generated, booleans are 0/1.** On
+  Postgres a `DateTime` column reads back as a `Temporal` object, which Node 24
+  (Vercel's newest) does not provide, so the contract stores ISO-8601 text and
+  the code uses `nowIso()` / `newId()` from `src/lib/db.ts`.
+- **The client is `/runtime`, not `/serverless`.** `@prisma/orm-postgres/serverless`
+  is for edge runtimes and omits `db.orm` and `db.transaction()`; Vercel's normal
+  Node functions use the standard client with the pooled connection string.
+
+## Deploying (Prisma Postgres + Vercel)
+
+1. **Database:** create a production database in the Prisma Console. Generate the
+   direct connection string for migrations and copy the pooled one for the app.
+2. **Baseline migration (once):** with `DATABASE_URL` set to the direct string,
+   run `npx prisma@8.0.0-rc.15 migration plan --name init` and commit
+   `migrations/`.
+3. **Apply it:** `npx prisma@8.0.0-rc.15 migration status --db "<direct url>"` to
+   preview, then `db migrate --db "<direct url>"`. Do this from your machine (or
+   CI), not from Vercel's build.
+4. **Vercel:** import the repo, set `DATABASE_URL` to the **pooled** string (and
+   optionally `OPENAI_API_KEY`), check the project's Node.js version, deploy.
+5. **Smoke test** the live URL: start a diagnostic, refresh mid-way, finish, and
+   check the function logs if anything fails.
 - **react-katex** ships no types; a stub declaration lives in
   `src/types/react-katex.d.ts`.

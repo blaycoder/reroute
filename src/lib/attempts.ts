@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db, newId } from "@/lib/db";
+import { db, newId, nowIso } from "@/lib/db";
 import {
   inferConfidence,
   inferMasterySignal,
@@ -92,7 +92,7 @@ export async function recordAttempt(
     }),
   };
 
-  await db.orm.Attempt.create({
+  await db.orm.public.Attempt.create({
     id: newId(),
     studentId: input.studentId,
     diagnosticId: input.sessionId,
@@ -106,6 +106,7 @@ export async function recordAttempt(
     inferredConfidence,
     inferredMasterySignal: inferMasterySignal(correct, inferredConfidence),
     telemetryJson: JSON.stringify(storedTelemetry),
+    createdAt: nowIso(),
   });
 
   return { ok: true, correct };

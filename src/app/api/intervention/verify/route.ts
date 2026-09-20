@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getQuestion } from "@/data/question-bank";
 import { clientTelemetrySchema, recordAttempt } from "@/lib/attempts";
 import { computeLearnerProfile, pickPriorityTopic } from "@/lib/compute-profile";
-import { db } from "@/lib/db";
+import { db, nowIso } from "@/lib/db";
 import { jsonError, parseBody } from "@/lib/http";
 import type { StoredIntervention } from "@/lib/intervention-content";
 import type { InterventionVerifyResponse } from "@/types/api";
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const intervention = await db.orm.Intervention.first({
+  const intervention = await db.orm.public.Intervention.first({
     id: body.data.interventionId,
   });
   if (!intervention) return jsonError("Intervention not found", 404);
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       return jsonError("Reassessment question not found", 404);
     }
     // Repeating a verify call must not double-count an answer.
-    const existing = await db.orm.Attempt.where({
+    const existing = await db.orm.public.Attempt.where({
       interventionId: intervention.id,
       questionId: question.id,
       purpose: "reassessment",
@@ -86,8 +86,8 @@ export async function POST(request: Request) {
   const improved = masteryAfter > masteryBefore;
 
   if (!intervention.completedAt) {
-    await db.orm.Intervention.where({ id: intervention.id }).update({
-      completedAt: new Date(),
+    await db.orm.public.Intervention.where({ id: intervention.id }).update({
+      completedAt: nowIso(),
       masteryAfter,
       improved: improved ? 1 : 0,
     });

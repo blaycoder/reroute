@@ -5,7 +5,7 @@ import {
   REASSESSMENT_QUESTION_COUNT,
   getInterventionTemplate,
 } from "@/data/interventions";
-import { db, newId } from "@/lib/db";
+import { db, newId, nowIso } from "@/lib/db";
 import { getLatestSessionId } from "@/lib/diagnostic-session";
 import { jsonError, parseBody } from "@/lib/http";
 import {
@@ -39,10 +39,10 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const student = await db.orm.Student.first({ id: body.data.studentId });
+  const student = await db.orm.public.Student.first({ id: body.data.studentId });
   if (!student) return jsonError("Student not found", 404);
 
-  const profileRow = await db.orm.LearnerProfile.where({
+  const profileRow = await db.orm.public.LearnerProfile.where({
     studentId: student.id,
   }).first();
   if (!profileRow) {
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   if (!sessionId) return jsonError("No diagnostic session found", 404);
 
   // Reloading the lesson resumes the unfinished one instead of piling up rows.
-  let intervention = await db.orm.Intervention.where({
+  let intervention = await db.orm.public.Intervention.where({
     studentId: student.id,
     topic: body.data.topic,
   })
@@ -78,13 +78,14 @@ export async function POST(request: Request) {
         REASSESSMENT_QUESTION_COUNT,
       ),
     };
-    intervention = await db.orm.Intervention.create({
+    intervention = await db.orm.public.Intervention.create({
       id: newId(),
       studentId: student.id,
       topic: body.data.topic,
       actionType: determineNextAction(topicProfile),
       contentJson: JSON.stringify(stored),
       masteryBefore: topicProfile.accuracy,
+      startedAt: nowIso(),
     });
   }
 

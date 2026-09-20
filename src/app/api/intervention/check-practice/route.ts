@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const intervention = await db.orm.Intervention.first({
+  const intervention = await db.orm.public.Intervention.first({
     id: body.data.interventionId,
   });
   if (!intervention) return jsonError("Intervention not found", 404);
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     return jsonError("Practice question not found", 404);
   }
 
-  const existing = await db.orm.Attempt.where({
+  const existing = await db.orm.public.Attempt.where({
     interventionId: intervention.id,
     questionId: question.id,
     purpose: "practice",

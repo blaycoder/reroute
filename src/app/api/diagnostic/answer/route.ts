@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const session = await db.orm.DiagnosticSession.first({
+  const session = await db.orm.public.DiagnosticSession.first({
     id: body.data.diagnosticId,
   });
   if (!session) return jsonError("Diagnostic session not found", 404);
