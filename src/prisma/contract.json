@@ -20,10 +20,6 @@
       "model": "LearnerProfile",
       "namespace": "__unbound__"
     },
-    "question": {
-      "model": "Question",
-      "namespace": "__unbound__"
-    },
     "student": {
       "model": "Student",
       "namespace": "__unbound__"
@@ -46,6 +42,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "sqlite/datetime@1",
+                  "kind": "scalar"
+                }
+              },
+              "diagnosisJson": {
+                "nullable": true,
+                "type": {
+                  "codecId": "sqlite/text@1",
                   "kind": "scalar"
                 }
               },
@@ -77,6 +80,20 @@
                   "kind": "scalar"
                 }
               },
+              "interventionId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "sqlite/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "purpose": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sqlite/text@1",
+                  "kind": "scalar"
+                }
+              },
               "questionId": {
                 "nullable": false,
                 "type": {
@@ -92,7 +109,7 @@
                 }
               },
               "selectedOption": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
                   "codecId": "sqlite/text@1",
                   "kind": "scalar"
@@ -114,6 +131,22 @@
               }
             },
             "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "diagnosticId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "DiagnosticSession",
+                  "namespace": "__unbound__"
+                }
+              },
               "student": {
                 "cardinality": "N:1",
                 "nullable": false,
@@ -139,6 +172,9 @@
                 "createdAt": {
                   "column": "createdAt"
                 },
+                "diagnosisJson": {
+                  "column": "diagnosisJson"
+                },
                 "diagnosticId": {
                   "column": "diagnosticId"
                 },
@@ -150,6 +186,12 @@
                 },
                 "inferredMasterySignal": {
                   "column": "inferredMasterySignal"
+                },
+                "interventionId": {
+                  "column": "interventionId"
+                },
+                "purpose": {
+                  "column": "purpose"
                 },
                 "questionId": {
                   "column": "questionId"
@@ -180,10 +222,10 @@
                   "kind": "scalar"
                 }
               },
-              "createdAt": {
-                "nullable": false,
+              "completedInSeconds": {
+                "nullable": true,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "sqlite/integer@1",
                   "kind": "scalar"
                 }
               },
@@ -191,6 +233,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "sqlite/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sqlite/datetime@1",
                   "kind": "scalar"
                 }
               },
@@ -210,6 +259,21 @@
               }
             },
             "relations": {
+              "attempts": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "diagnosticId"
+                  ]
+                },
+                "to": {
+                  "model": "Attempt",
+                  "namespace": "__unbound__"
+                }
+              },
               "student": {
                 "cardinality": "N:1",
                 "nullable": false,
@@ -232,11 +296,14 @@
                 "completedAt": {
                   "column": "completedAt"
                 },
-                "createdAt": {
-                  "column": "createdAt"
+                "completedInSeconds": {
+                  "column": "completedInSeconds"
                 },
                 "id": {
                   "column": "id"
+                },
+                "startedAt": {
+                  "column": "startedAt"
                 },
                 "studentId": {
                   "column": "studentId"
@@ -386,6 +453,13 @@
                   "kind": "scalar"
                 }
               },
+              "headlineDiagnosisJson": {
+                "nullable": true,
+                "type": {
+                  "codecId": "sqlite/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -452,6 +526,9 @@
                 "byTopicJson": {
                   "column": "byTopicJson"
                 },
+                "headlineDiagnosisJson": {
+                  "column": "headlineDiagnosisJson"
+                },
                 "id": {
                   "column": "id"
                 },
@@ -473,137 +550,6 @@
               },
               "namespaceId": "__unbound__",
               "table": "learnerProfile"
-            }
-          },
-          "Question": {
-            "fields": {
-              "concept": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "correctOption": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "difficulty": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "distractorsJson": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "estimatedTimeSeconds": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/integer@1",
-                  "kind": "scalar"
-                }
-              },
-              "explanation": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "id": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "optionsJson": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "questionText": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "subject": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "subtopic": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "topic": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              }
-            },
-            "relations": {},
-            "storage": {
-              "fields": {
-                "concept": {
-                  "column": "concept"
-                },
-                "correctOption": {
-                  "column": "correctOption"
-                },
-                "difficulty": {
-                  "column": "difficulty"
-                },
-                "distractorsJson": {
-                  "column": "distractorsJson"
-                },
-                "estimatedTimeSeconds": {
-                  "column": "estimatedTimeSeconds"
-                },
-                "explanation": {
-                  "column": "explanation"
-                },
-                "id": {
-                  "column": "id"
-                },
-                "optionsJson": {
-                  "column": "optionsJson"
-                },
-                "questionText": {
-                  "column": "questionText"
-                },
-                "subject": {
-                  "column": "subject"
-                },
-                "subtopic": {
-                  "column": "subtopic"
-                },
-                "topic": {
-                  "column": "topic"
-                }
-              },
-              "namespaceId": "__unbound__",
-              "table": "question"
             }
           },
           "Student": {
@@ -764,6 +710,11 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "diagnosisJson": {
+                  "codecId": "sqlite/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "diagnosticId": {
                   "codecId": "sqlite/text@1",
                   "nativeType": "text",
@@ -784,6 +735,16 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "interventionId": {
+                  "codecId": "sqlite/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "purpose": {
+                  "codecId": "sqlite/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
                 "questionId": {
                   "codecId": "sqlite/text@1",
                   "nativeType": "text",
@@ -797,7 +758,7 @@
                 "selectedOption": {
                   "codecId": "sqlite/text@1",
                   "nativeType": "text",
-                  "nullable": false
+                  "nullable": true
                 },
                 "studentId": {
                   "codecId": "sqlite/text@1",
@@ -825,6 +786,22 @@
                     ],
                     "namespaceId": "__unbound__",
                     "tableName": "student"
+                  }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "diagnosticId"
+                    ],
+                    "namespaceId": "__unbound__",
+                    "tableName": "attempt"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "__unbound__",
+                    "tableName": "diagnosticSession"
                   }
                 }
               ],
@@ -860,17 +837,22 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "createdAt": {
+                "completedInSeconds": {
+                  "codecId": "sqlite/integer@1",
+                  "nativeType": "integer",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "sqlite/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "startedAt": {
                   "codecId": "sqlite/datetime@1",
                   "default": {
                     "expression": "now()",
                     "kind": "function"
                   },
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "id": {
-                  "codecId": "sqlite/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
@@ -1019,6 +1001,11 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "headlineDiagnosisJson": {
+                  "codecId": "sqlite/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
                   "codecId": "sqlite/text@1",
                   "nativeType": "text",
@@ -1086,87 +1073,6 @@
                 }
               ]
             },
-            "question": {
-              "columns": {
-                "concept": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "correctOption": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "difficulty": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "distractorsJson": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "estimatedTimeSeconds": {
-                  "codecId": "sqlite/integer@1",
-                  "nativeType": "integer",
-                  "nullable": false
-                },
-                "explanation": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "id": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "optionsJson": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "questionText": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "subject": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "subtopic": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "topic": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                }
-              },
-              "foreignKeys": [],
-              "indexes": [
-                {
-                  "columns": [
-                    "topic"
-                  ],
-                  "name": "question_topic_idx_655aa1bc",
-                  "prefix": "question_topic_idx",
-                  "unique": false
-                }
-              ],
-              "primaryKey": {
-                "columns": [
-                  "id"
-                ]
-              },
-              "uniques": []
-            },
             "student": {
               "columns": {
                 "createdAt": {
@@ -1222,7 +1128,7 @@
         "id": "__unbound__"
       }
     },
-    "storageHash": "855666c61b92820aebdb9af4ff8138123d7e624b999d6c4bf38a3e5987fb865c"
+    "storageHash": "7de208c013e0546c781c26edd16cd4e41d22e92bf2ebbfe3cc34545eec7188c1"
   },
   "capabilities": {
     "sql": {
