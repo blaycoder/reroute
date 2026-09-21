@@ -1,0 +1,10 @@
+{
+  "topic": "Geometry",
+  "conceptLabel": "the angles in a triangle",
+  "explanation": "The three angles of a triangle always add up to $180^\\circ$. Add the angles you already know, then take that total away from $180^\\circ$ to find the missing one. When the angles are written with $x$, add the $x$ terms first and solve for $x$.",
+  "workedExample": "Two angles are $50^\\circ$ and $60^\\circ$. They add to $110^\\circ$, so the third angle is $180^\\circ - 110^\\circ = 70^\\circ$.",
+  "guidedQuestion": "Now try: two angles of a triangle are $40^\\circ$ and $60^\\circ$. What is the third angle?",
+  "guidedQuestionId": "g_geo_001",
+  "practiceQuestionIds": ["p_geo_001", "p_geo_002", "p_geo_003"],
+  "reassessmentQuestionIds": ["r_geo_001", "r_geo_002", "r_geo_003"]
+}

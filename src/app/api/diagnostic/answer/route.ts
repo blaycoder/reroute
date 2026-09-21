@@ -1,44 +1,35 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db, newId } from "@/lib/db";
+import { getQuestion } from "@/data/question-bank";
+import { clientTelemetrySchema, recordAttempt } from "@/lib/attempts";
+import { db } from "@/lib/db";
+import { pickNextQuestion } from "@/lib/diagnostic-router";
+import {
+  diagnosticPool,
+  loadAnsweredQuestions,
+  loadProgress,
+} from "@/lib/diagnostic-session";
 import { jsonError, parseBody } from "@/lib/http";
-import { buildLearnerProfile } from "@/lib/profile-builder";
-import { inferConfidence, inferMasterySignal } from "@/lib/telemetry";
 import type { DiagnosticAnswerResponse } from "@/types/api";
-
-const telemetrySchema = z.object({
-  timeToFirstClickMs: z.number().min(0),
-  totalDwellTimeMs: z.number().min(0),
-  optionSwitchCount: z.number().int().min(0),
-  hoverSequence: z.array(z.string()),
-  idleBeforeSubmitMs: z.number().min(0),
-  answerChanges: z.array(
-    z.object({
-      from: z.string(),
-      to: z.string(),
-      timestampMs: z.number(),
-    }),
-  ),
-  wasSubmitted: z.boolean(),
-});
 
 const bodySchema = z.object({
   diagnosticId: z.string().min(1),
   questionId: z.string().min(1),
-  selectedOption: z.string().min(1),
-  responseTimeSeconds: z.number().positive(),
-  telemetry: telemetrySchema,
+  /** null only when the timer ran out with nothing selected. */
+  selectedOption: z.string().min(1).nullable(),
+  telemetry: clientTelemetrySchema,
 });
 
-// Records one attempt, infers confidence/mastery signal server-side from the
-// raw telemetry, then rebuilds the learner profile from all attempts.
+// Records one attempt, then routes the next question from the student's real
+// answers. Safe to repeat: a question that was already answered returns the
+// current progress instead of writing a duplicate.
 export async function POST(request: Request) {
   const body = await parseBody(request, bodySchema);
   if (!body.ok) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const session = await db.orm.DiagnosticSession.first({
+  const session = await db.orm.public.DiagnosticSession.first({
     id: body.data.diagnosticId,
   });
   if (!session) return jsonError("Diagnostic session not found", 404);
@@ -46,44 +37,35 @@ export async function POST(request: Request) {
     return jsonError("Diagnostic session already completed", 400);
   }
 
-  const question = await db.orm.Question.first({ id: body.data.questionId });
-  if (!question) return jsonError("Question not found", 404);
-
-  const options = JSON.parse(question.optionsJson) as Record<string, string>;
-  if (!(body.data.selectedOption in options)) {
-    return jsonError(
-      `selectedOption must be one of: ${Object.keys(options).join(", ")}`,
-      400,
-    );
+  const question = getQuestion(body.data.questionId);
+  if (!question || question.purpose !== "diagnostic") {
+    return jsonError("Question not found", 404);
   }
 
-  const correct = body.data.selectedOption === question.correctOption;
-  const inferredConfidence = inferConfidence({
-    timeToFirstClickMs: body.data.telemetry.timeToFirstClickMs,
-    totalDwellTimeMs: body.data.telemetry.totalDwellTimeMs,
-    optionSwitchCount: body.data.telemetry.optionSwitchCount,
-    estimatedTimeSeconds: question.estimatedTimeSeconds,
-  });
-  const inferredMasterySignal = inferMasterySignal(
-    correct,
-    inferredConfidence,
-  );
+  const answered = await loadAnsweredQuestions(session.id);
 
-  await db.orm.Attempt.create({
-    id: newId(),
-    studentId: session.studentId,
-    questionId: question.id,
-    diagnosticId: session.id,
-    selectedOption: body.data.selectedOption,
-    correct: correct ? 1 : 0,
-    responseTimeSeconds: Math.round(body.data.responseTimeSeconds),
-    inferredConfidence,
-    inferredMasterySignal,
-    telemetryJson: JSON.stringify(body.data.telemetry),
-  });
+  if (!answered.some((a) => a.questionId === question.id)) {
+    // Only the question the router is currently asking may be answered, so a
+    // stale tab or a replayed request cannot skip or reorder the diagnostic.
+    const expected = pickNextQuestion(diagnosticPool, answered);
+    if (!expected || expected.id !== question.id) {
+      return jsonError("That is not the current question", 409);
+    }
 
-  await buildLearnerProfile(session.studentId);
+    const result = await recordAttempt({
+      sessionId: session.id,
+      studentId: session.studentId,
+      question,
+      purpose: "diagnostic",
+      selectedOption: body.data.selectedOption,
+      telemetry: body.data.telemetry,
+    });
+    if (!result.ok) return jsonError(result.error, result.status);
+  }
 
-  const payload: DiagnosticAnswerResponse = { recorded: true, correct };
+  const progress = await loadProgress(session.id);
+  if (!progress) return jsonError("Diagnostic session not found", 404);
+
+  const payload: DiagnosticAnswerResponse = { recorded: true, progress };
   return NextResponse.json(payload);
 }

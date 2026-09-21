@@ -1,14 +1,8 @@
 import type { NextAction } from "@/lib/rules-engine";
-import type {
-  AttemptTelemetry,
-  Confidence,
-  ErrorType,
-  InterventionRecord,
-  TopicProfile,
-} from "./learner-state";
+import type { AttemptTelemetry, LearnerState } from "./learner-state";
 import type { Question } from "./question";
 
-// Wire contracts for the six API routes. Answer keys and distractor metadata
+// Wire contracts for the API routes. Answer keys and distractor metadata
 // NEVER appear in any request/response here — the client only ever sends an
 // option letter and receives sanitized content.
 
@@ -17,8 +11,14 @@ export interface ApiError {
   details?: unknown;
 }
 
+/**
+ * What the browser sends. `timePressureSignal` is derived on the server from
+ * the raw timing, so a client can't spoof it.
+ */
+export type ClientTelemetry = Omit<AttemptTelemetry, "timePressureSignal">;
+
 // ---------------------------------------------------------------------------
-// POST /api/diagnostic/start
+// POST /api/diagnostic/start · GET /api/diagnostic/[diagnosticId]
 // ---------------------------------------------------------------------------
 
 export interface DiagnosticStartRequest {
@@ -32,16 +32,29 @@ export interface DiagnosticStartRequest {
 export interface DiagnosticQuestionPreview {
   id: string;
   topic: string;
+  subtopic: string;
   difficulty: Question["difficulty"];
+  estimatedTimeSeconds: number;
   questionText: string;
   options: Record<string, string>;
 }
 
-export interface DiagnosticStartResponse {
+/**
+ * Where a diagnostic stands. The server routes: it sends ONE question at a
+ * time, so a refresh resumes from the last answer and no answer key or
+ * upcoming question ever reaches the browser.
+ */
+export interface DiagnosticProgress {
   studentId: string;
   diagnosticId: string;
-  questions: DiagnosticQuestionPreview[];
+  total: number;
+  answered: number;
+  completed: boolean;
+  /** The next question, or null once every question has been answered. */
+  question: DiagnosticQuestionPreview | null;
 }
+
+export type DiagnosticStartResponse = DiagnosticProgress;
 
 // ---------------------------------------------------------------------------
 // POST /api/diagnostic/answer
@@ -50,15 +63,14 @@ export interface DiagnosticStartResponse {
 export interface DiagnosticAnswerRequest {
   diagnosticId: string;
   questionId: string;
-  selectedOption: string;
-  responseTimeSeconds: number;
-  telemetry: AttemptTelemetry;
+  /** null only when the timer ran out with nothing selected. */
+  selectedOption: string | null;
+  telemetry: ClientTelemetry;
 }
 
 export interface DiagnosticAnswerResponse {
   recorded: true;
-  /** Sequencer input only — never rendered to the student. */
-  correct: boolean;
+  progress: DiagnosticProgress;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,18 +81,7 @@ export interface DiagnosticCompleteRequest {
   diagnosticId: string;
 }
 
-export interface LearnerProfileSummary {
-  overall: {
-    accuracy: number;
-    avgSpeedSeconds: number;
-    confidenceCalibration: number;
-    speedScore: number;
-  };
-  byTopic: Record<string, TopicProfile>;
-  readinessIndex: number;
-  profileConfidence: number;
-  interventionHistory: InterventionRecord[];
-}
+export type LearnerProfileSummary = LearnerState["learnerProfile"];
 
 export interface DiagnosticCompleteResponse {
   learnerProfile: LearnerProfileSummary;
@@ -104,13 +105,13 @@ export type FingerprintResponse = LearnerProfileSummary & {
 export interface InterventionGenerateRequest {
   studentId: string;
   topic: string;
-  errorType: ErrorType;
-  confidence: Confidence;
 }
 
 export interface PracticeItem {
+  id: string;
   questionText: string;
   options: Record<string, string>;
+  estimatedTimeSeconds: number;
 }
 
 export interface InterventionContent {
@@ -129,11 +130,31 @@ export interface InterventionGenerateResponse {
   content: InterventionContent;
 }
 
+// ---------------------------------------------------------------------------
+// POST /api/intervention/check-guided · check-practice
+// ---------------------------------------------------------------------------
+
+export interface InterventionCheckGuidedRequest {
+  interventionId: string;
+  guidedResponse: string;
+}
+
 export interface InterventionCheckGuidedResponse {
-  /** false when no server-side answer key exists (LLM-generated content). */
   graded: boolean;
   correct: boolean;
+  /** Names the slip when the wrong answer matches a known misconception. */
   hint: string | null;
+}
+
+export interface InterventionCheckPracticeRequest {
+  interventionId: string;
+  questionId: string;
+  selectedOption: string | null;
+  telemetry: ClientTelemetry;
+}
+
+export interface InterventionCheckPracticeResponse {
+  correct: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,19 +163,17 @@ export interface InterventionCheckGuidedResponse {
 
 export interface InterventionVerifyRequest {
   interventionId: string;
-  answers: {
-    guidedResponse: string;
-    practiceResponses: string[];
-    reassessmentResponses?: string[];
-  };
-  /** Captured per question; stored-payload-ready, unused for scoring yet. */
-  telemetry?: AttemptTelemetry[];
+  reassessment: {
+    questionId: string;
+    selectedOption: string | null;
+    telemetry: ClientTelemetry;
+  }[];
 }
 
 export interface InterventionVerifyResponse {
   masteryBefore: number;
   masteryAfter: number;
   improved: boolean;
-  /** null when no profile exists yet to prioritize against. */
+  /** null when no other topic remains to prioritize. */
   nextPriorityTopic: string | null;
 }

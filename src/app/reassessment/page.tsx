@@ -2,31 +2,35 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
 import { ProgressHeader } from "@/components/assessment/ProgressHeader";
 import {
   QuestionCard,
   type QuestionCardOption,
+  type ReadTelemetry,
 } from "@/components/assessment/QuestionCard";
+import { Timer } from "@/components/assessment/Timer";
+import { BeforeAfterBar } from "@/components/fingerprint/BeforeAfterBar";
+import { ApiRecovery, useRetryCounter } from "@/components/ui/ApiRecovery";
+import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { apiFetch } from "@/lib/api-client";
-import { BeforeAfterBar } from "@/components/fingerprint/BeforeAfterBar";
+import { ApiUnavailableError, apiFetch } from "@/lib/api-client";
 import { tokens } from "@/design/tokens";
 import type {
+  ClientTelemetry,
   InterventionGenerateResponse,
+  InterventionVerifyRequest,
   InterventionVerifyResponse,
   PracticeItem,
 } from "@/types/api";
-import type { AttemptTelemetry } from "@/types/learner-state";
 
 const INTERVENTION_KEY = "reroute.intervention";
 
 interface StoredIntervention {
   studentId: string;
   topic: string;
-  guidedResponse?: string;
-  practiceResponses?: string[];
+  /** Set by /practice once every practice question has been answered. */
+  practiceDone?: boolean;
   generate?: InterventionGenerateResponse;
 }
 
@@ -38,15 +42,17 @@ interface VerifyResult {
 
 const pct = (value: number) => Math.round(value * 100);
 
-const EMPTY_SNAPSHOT: AttemptTelemetry = {
+const emptyTelemetry = (timedOut: boolean): ClientTelemetry => ({
   timeToFirstClickMs: 0,
   totalDwellTimeMs: 0,
+  timeOnQuestionMs: 0,
   optionSwitchCount: 0,
   hoverSequence: [],
   idleBeforeSubmitMs: 0,
   answerChanges: [],
-  wasSubmitted: true,
-};
+  wasSubmitted: false,
+  timedOut,
+});
 
 export default function ReassessmentPage() {
   const router = useRouter();
@@ -60,118 +66,94 @@ export default function ReassessmentPage() {
   const [items, setItems] = useState<PracticeItem[]>([]);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [snapshot, setSnapshot] = useState<AttemptTelemetry | null>(null);
-  const [attempts, setAttempts] = useState<AttemptTelemetry[]>([]);
   const [result, setResult] = useState<VerifyResult | null>(null);
+  const retries = useRetryCounter();
 
-  const shownAtRef = useRef<number | null>(null);
-  const lastInteractionAtRef = useRef<number | null>(null);
-  const responsesRef = useRef<string[]>([]);
+  const answersRef = useRef<InterventionVerifyRequest["reassessment"]>([]);
+  const telemetryRef = useRef<ReadTelemetry | null>(null);
+  const advancingRef = useRef(false);
+  const interventionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(INTERVENTION_KEY);
     const stored = raw ? (JSON.parse(raw) as StoredIntervention) : null;
-    if (
-      !stored?.generate ||
-      !stored.topic ||
-      !stored.guidedResponse ||
-      !stored.practiceResponses
-    ) {
+    if (!stored?.generate || !stored.topic) {
       router.replace("/intervention");
       return;
     }
+    if (!stored.practiceDone) {
+      router.replace("/practice");
+      return;
+    }
+    const reassessment = stored.generate.content.reassessment;
+    if (reassessment.length === 0) {
+      router.replace("/progress");
+      return;
+    }
+    interventionIdRef.current = stored.generate.interventionId;
     setTopic(stored.topic);
-    setItems(stored.generate.content.reassessment ?? []);
-    // No reassessment items (generic path) — go straight to verification.
-    setPhase(stored.generate.content.reassessment?.length ? "questions" : "verifying");
+    setItems(reassessment);
+    setPhase("questions");
   }, [router]);
 
-  // Per-question timers: reset whenever the question changes.
+  // A new question (or phase) unlocks advancing again.
   useEffect(() => {
-    if (phase === "questions") {
-      shownAtRef.current = performance.now();
-      lastInteractionAtRef.current = null;
-    }
-  }, [phase, index]);
+    advancingRef.current = false;
+  }, [index, phase]);
 
-  const handleSelect = useCallback(
-    (optionId: string, telemetry: AttemptTelemetry) => {
-      setSelected(optionId);
-      setSnapshot(telemetry);
-      lastInteractionAtRef.current = performance.now();
-    },
-    [],
-  );
-
-  const submitVerify = useCallback(
-    async (reassessmentResponses: string[], telemetry: AttemptTelemetry[]) => {
-      const raw = sessionStorage.getItem(INTERVENTION_KEY);
-      const stored = raw ? (JSON.parse(raw) as StoredIntervention) : null;
-      if (!stored?.generate || !stored.guidedResponse) return;
-      setVerifyError(false);
-      try {
-        const data = await apiFetch<InterventionVerifyResponse>(
-          "/api/intervention/verify",
-          {
-            interventionId: stored.generate.interventionId,
-            answers: {
-              guidedResponse: stored.guidedResponse,
-              practiceResponses: stored.practiceResponses ?? [],
-              reassessmentResponses,
-            },
-            telemetry,
-          },
-        );
-        sessionStorage.setItem(
-          "reroute.verifyResult",
-          JSON.stringify({ topic, ...data }),
-        );
-        setResult({
-          improved: data.improved,
-          masteryBefore: data.masteryBefore,
-          masteryAfter: data.masteryAfter ?? 0,
-        });
-        setPhase("result");
-      } catch {
+  const submitVerify = useCallback(async () => {
+    const interventionId = interventionIdRef.current;
+    if (!interventionId) return;
+    setVerifyError(false);
+    const request: InterventionVerifyRequest = {
+      interventionId,
+      reassessment: answersRef.current,
+    };
+    try {
+      const data = await apiFetch<InterventionVerifyResponse>(
+        "/api/intervention/verify",
+        request,
+      );
+      sessionStorage.setItem(
+        "reroute.verifyResult",
+        JSON.stringify({ topic, ...data }),
+      );
+      setResult({
+        improved: data.improved,
+        masteryBefore: data.masteryBefore,
+        masteryAfter: data.masteryAfter,
+      });
+      setPhase("result");
+    } catch (error) {
+      if (!(error instanceof ApiUnavailableError)) {
         showToast({
           variant: "error",
-          message:
-            "Couldn't load your results. Check your connection and try again.",
+          message: "We couldn't score that. Please try again.",
         });
-        setVerifyError(true);
       }
-    },
-    [showToast, topic],
-  );
+      setVerifyError(true);
+    }
+  }, [showToast, topic]);
 
-  const handleNext = () => {
-    if (!selected || submittingBlocked()) return;
-
-    const now = performance.now();
-    const shownAt = shownAtRef.current ?? now;
-    const lastInteraction = lastInteractionAtRef.current ?? shownAt;
-    const totalDwellTimeMs = Math.round(now - shownAt);
-    const merged: AttemptTelemetry = {
-      ...(snapshot ?? EMPTY_SNAPSHOT),
-      totalDwellTimeMs,
-      idleBeforeSubmitMs: Math.round(now - lastInteraction),
-      wasSubmitted: true,
-    };
-    const updatedAttempts = [...attempts, merged];
-    responsesRef.current[index] = selected;
-    setAttempts(updatedAttempts);
+  // Records the current answer with its telemetry, then moves on. Used by both
+  // the Next button and the timer running out.
+  const advance = (choice: string | null, timedOut: boolean) => {
+    const item = items[index];
+    if (phase !== "questions" || !item || advancingRef.current) return;
+    advancingRef.current = true;
+    answersRef.current.push({
+      questionId: item.id,
+      selectedOption: choice,
+      telemetry: telemetryRef.current?.(timedOut) ?? emptyTelemetry(timedOut),
+    });
     setSelected(null);
-    setSnapshot(null);
-
     if (index + 1 >= items.length) {
       setPhase("verifying");
-      void submitVerify(responsesRef.current, updatedAttempts);
+      void submitVerify();
       return;
     }
     setIndex((current) => current + 1);
   };
-
-  const submittingBlocked = () => phase !== "questions";
 
   if (phase === "booting") {
     return (
@@ -201,13 +183,14 @@ export default function ReassessmentPage() {
             </>
           )}
           {verifyError && (
-            <Button
-              size="lg"
-              fullWidth
-              onClick={() => void submitVerify(responsesRef.current, attempts)}
-            >
-              Try again
-            </Button>
+            <ApiRecovery
+              message="We couldn't load your results. Check your connection and try again."
+              retryCount={retries.count}
+              onRetry={() => {
+                retries.bump();
+                void submitVerify();
+              }}
+            />
           )}
         </div>
       </main>
@@ -243,9 +226,9 @@ export default function ReassessmentPage() {
     );
   }
 
-  if (!items[index]) return null;
-
   const item = items[index];
+  if (!item) return null;
+
   const options: QuestionCardOption[] = Object.entries(item.options).map(
     ([id, text]) => ({ id, text }),
   );
@@ -268,23 +251,31 @@ export default function ReassessmentPage() {
             current={index + 1}
             total={items.length}
             topicLabel={topic}
+            timer={
+              <Timer
+                key={item.id}
+                totalSeconds={item.estimatedTimeSeconds}
+                onExpire={() => advance(selected, true)}
+              />
+            }
           />
         </div>
 
         <QuestionCard
-          key={index}
+          key={item.id}
           className="mt-xl"
           questionText={item.questionText}
           options={options}
           selectedOption={selected}
           result={null}
-          onSelect={handleSelect}
+          onSelect={setSelected}
+          telemetryRef={telemetryRef}
         />
       </div>
 
       <div className="sticky bottom-0 mx-auto w-full max-w-md bg-background pb-lg pt-md">
         {selected != null && (
-          <Button size="lg" fullWidth onClick={handleNext}>
+          <Button size="lg" fullWidth onClick={() => advance(selected, false)}>
             {index + 1 >= items.length ? "Finish" : "Next"}
           </Button>
         )}

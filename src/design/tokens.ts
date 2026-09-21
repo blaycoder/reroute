@@ -17,6 +17,9 @@ export const tokens = {
     textMuted: "#5A5A5A",
     success: "#2E6E5E",
     error: "#8A2A2A",
+    // Soft fills for the selected / correct and wrong answer states.
+    primaryTint: "#E8F0EC",
+    errorTint: "#F7E8E8",
   },
   spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 },
   radius: { sm: 8, md: 12, lg: 16, pill: 999 },

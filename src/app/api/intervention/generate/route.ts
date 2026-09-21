@@ -1,183 +1,107 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db, newId } from "@/lib/db";
+import { getQuestion } from "@/data/question-bank";
 import {
-  getFallbackIntervention,
-  type FallbackPracticeItem,
-} from "@/data/fallback-interventions";
+  REASSESSMENT_QUESTION_COUNT,
+  getInterventionTemplate,
+} from "@/data/interventions";
+import { db, newId, nowIso } from "@/lib/db";
+import { getLatestSessionId } from "@/lib/diagnostic-session";
 import { jsonError, parseBody } from "@/lib/http";
-import { generateText } from "@/lib/llm";
-import { determineNextAction } from "@/lib/rules-engine";
-import type {
-  InterventionContent,
-  InterventionGenerateResponse,
-  PracticeItem,
-} from "@/types/api";
+import {
+  toPracticeItem,
+  type StoredIntervention,
+} from "@/lib/intervention-content";
+import { determineNextAction, type NextAction } from "@/lib/rules-engine";
+import type { InterventionGenerateResponse } from "@/types/api";
 import type { TopicProfile } from "@/types/learner-state";
+import type { Question } from "@/types/question";
 
 const bodySchema = z.object({
   studentId: z.string().min(1),
   topic: z.string().min(1),
-  errorType: z.enum(["conceptual", "procedural", "application", "careless"]),
-  confidence: z.enum(["high", "medium", "low"]),
 });
 
-const llmItemSchema = z.object({
-  questionText: z.string().min(1),
-  options: z.record(z.string(), z.string().min(1)),
-  correctOption: z.string().min(1),
-});
+function lookUp(ids: string[]): Question[] {
+  return ids.flatMap((id) => {
+    const question = getQuestion(id);
+    return question ? [question] : [];
+  });
+}
 
-const contentSchema = z.object({
-  explanation: z.string().min(1),
-  workedExample: z.string().min(1),
-  guidedQuestion: z.string().min(1),
-  /** Server-side only: grades the guided question, never shown to the student. */
-  guidedAnswer: z.string().min(1),
-  practice: z.array(llmItemSchema).min(1),
-  reassessment: z.array(llmItemSchema).min(1),
-});
-
-const SYSTEM_PROMPT = [
-  "You are Reroute's mathematics tutor for JAMB (Nigerian) students.",
-  "Teach to ONE specific misconception. Return STRICT JSON only — no markdown fences — matching exactly:",
-  '{"explanation": string, "workedExample": string, "guidedQuestion": string, "guidedAnswer": string, "practice": [{"questionText": string, "options": {"A": string, "B": string, "C": string, "D": string}, "correctOption": "A"}], "reassessment": [same shape]}',
-  "practice must have exactly 3 items; reassessment exactly 2 items testing the same skill with new numbers.",
-  "guidedAnswer is the expected answer to guidedQuestion — used server-side only, never shown to the student.",
-  "Use $...$ inline LaTeX for all mathematics.",
-  "explanation: teaches the corrected understanding of the misconception.",
-  "workedExample: one fully worked similar problem, step by step.",
-  "guidedQuestion: ONE short question the learner answers with a brief expression.",
-].join("\n");
-
-const stripItem = ({
-  questionText,
-  options,
-}: FallbackPracticeItem | z.infer<typeof llmItemSchema>): PracticeItem => ({
-  questionText,
-  options,
-});
-
-const itemsAreValid = (
-  items: z.infer<typeof llmItemSchema>[],
-): boolean =>
-  items.every((item) => Boolean(item.options[item.correctOption]));
-
-// Picks the action via the deterministic rules engine, then sources content:
-// LLM first, pre-written fallback as the guaranteed floor.
+// Picks the action from the student's own computed profile (deterministic —
+// the AI's error type is already in there), then serves pre-written content:
+// the concept's explanation and worked example, plus questions from the bank.
+// Nothing is generated on the fly, so there is nothing for an LLM to get wrong.
 export async function POST(request: Request) {
   const body = await parseBody(request, bodySchema);
   if (!body.ok) {
     return jsonError("Invalid request body", 400, body.issues);
   }
 
-  const student = await db.orm.Student.first({ id: body.data.studentId });
+  const student = await db.orm.public.Student.first({ id: body.data.studentId });
   if (!student) return jsonError("Student not found", 404);
 
-  const profileRow = await db.orm.LearnerProfile.where({
-    studentId: body.data.studentId,
+  const profileRow = await db.orm.public.LearnerProfile.where({
+    studentId: student.id,
   }).first();
-  const stored = (
-    profileRow
-      ? (JSON.parse(profileRow.byTopicJson) as Record<string, TopicProfile>)
-      : {}
+  if (!profileRow) {
+    return jsonError("No learner profile yet — complete a diagnostic first", 404);
+  }
+  const topicProfile = (
+    JSON.parse(profileRow.byTopicJson) as Record<string, TopicProfile>
   )[body.data.topic];
+  if (!topicProfile) return jsonError("No profile for that topic", 404);
 
-  // Request values are fresher than the stored profile — override.
-  const effective: TopicProfile = {
-    accuracy: stored?.accuracy ?? 0,
-    avgSpeedSeconds: stored?.avgSpeedSeconds ?? 0,
-    confidence: body.data.confidence,
-    errorType: body.data.errorType,
-    priorityScore: stored?.priorityScore ?? 0,
-    profileConfidence: stored?.profileConfidence ?? 0,
-  };
-  const actionType = determineNextAction(effective);
-  const masteryBefore = stored?.accuracy ?? 0;
+  const template = getInterventionTemplate(body.data.topic);
+  if (!template) return jsonError("No lesson available for that topic", 400);
 
-  const fallback = getFallbackIntervention(body.data.topic);
+  const sessionId = await getLatestSessionId(student.id);
+  if (!sessionId) return jsonError("No diagnostic session found", 404);
 
-  let content: InterventionContent | null = null;
-  let source: "llm" | "fallback" = "fallback";
-  let answerKey: {
-    guided: string;
-    practice: string[];
-    reassessment: string[];
-  } | null = fallback.answerKey;
-  let practiceItems: FallbackPracticeItem[] = fallback.practice;
-  let reassessmentItems: FallbackPracticeItem[] = fallback.reassessment;
-
-  const llm = await generateText({
-    system: SYSTEM_PROMPT,
-    user: JSON.stringify({
-      topic: body.data.topic,
-      errorType: body.data.errorType,
-      confidence: body.data.confidence,
-      nextAction: actionType,
-    }),
-  });
-  if (llm) {
-    const jsonMatch = llm.text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        const parsed = contentSchema.safeParse(JSON.parse(jsonMatch[0]));
-        if (
-          parsed.success &&
-          itemsAreValid(parsed.data.practice) &&
-          itemsAreValid(parsed.data.reassessment)
-        ) {
-          content = {
-            explanation: parsed.data.explanation,
-            workedExample: parsed.data.workedExample,
-            guidedQuestion: parsed.data.guidedQuestion,
-            practice: parsed.data.practice.map(stripItem),
-            reassessment: parsed.data.reassessment.map(stripItem),
-          };
-          answerKey = {
-            guided: parsed.data.guidedAnswer,
-            practice: parsed.data.practice.map((i) => i.correctOption),
-            reassessment: parsed.data.reassessment.map((i) => i.correctOption),
-          };
-          practiceItems = parsed.data.practice;
-          reassessmentItems = parsed.data.reassessment;
-          source = "llm";
-        }
-      } catch {
-        // fall through to fallback
-      }
-    }
-  }
-  if (!content) {
-    content = {
-      explanation: fallback.explanation,
-      workedExample: fallback.workedExample,
-      guidedQuestion: fallback.guidedQuestion,
-      practice: fallback.practice.map(stripItem),
-      reassessment: fallback.reassessment.map(stripItem),
-    };
-  }
-
-  const intervention = await db.orm.Intervention.create({
-    id: newId(),
-    studentId: body.data.studentId,
+  // Reloading the lesson resumes the unfinished one instead of piling up rows.
+  let intervention = await db.orm.public.Intervention.where({
+    studentId: student.id,
     topic: body.data.topic,
-    actionType,
-    contentJson: JSON.stringify({
-      content,
-      answerKey,
-      source,
-      guidedHint: fallback.guidedHint,
-      practiceItems,
-      reassessmentItems,
-    }),
-    masteryBefore,
-  });
+  })
+    .where((row) => row.completedAt.isNull())
+    .orderBy((row) => row.startedAt.desc())
+    .first();
+
+  if (!intervention) {
+    const stored: StoredIntervention = {
+      sessionId,
+      guidedQuestionId: template.guidedQuestionId,
+      practiceQuestionIds: template.practiceQuestionIds,
+      reassessmentQuestionIds: template.reassessmentQuestionIds.slice(
+        0,
+        REASSESSMENT_QUESTION_COUNT,
+      ),
+    };
+    intervention = await db.orm.public.Intervention.create({
+      id: newId(),
+      studentId: student.id,
+      topic: body.data.topic,
+      actionType: determineNextAction(topicProfile),
+      contentJson: JSON.stringify(stored),
+      masteryBefore: topicProfile.accuracy,
+      startedAt: nowIso(),
+    });
+  }
+
+  const stored = JSON.parse(intervention.contentJson) as StoredIntervention;
 
   const payload: InterventionGenerateResponse = {
     interventionId: intervention.id,
-    actionType,
-    conceptLabel: fallback.conceptLabel,
-    content,
+    actionType: intervention.actionType as NextAction,
+    conceptLabel: template.conceptLabel,
+    content: {
+      explanation: template.explanation,
+      workedExample: template.workedExample,
+      guidedQuestion: template.guidedQuestion,
+      practice: lookUp(stored.practiceQuestionIds).map(toPracticeItem),
+      reassessment: lookUp(stored.reassessmentQuestionIds).map(toPracticeItem),
+    },
   };
   return NextResponse.json(payload);
 }

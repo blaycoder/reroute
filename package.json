@@ -9,11 +9,10 @@
     "lint": "next lint",
     "test": "vitest run",
     "emit": "npx prisma@8.0.0-rc.15 contract emit",
-    "db:init": "npx prisma@8.0.0-rc.15 db init",
-    "seed": "tsx scripts/seed.ts"
+    "db:init": "npx prisma@8.0.0-rc.15 db init"
   },
   "dependencies": {
-    "@prisma/orm-sqlite": "^8.0.0-rc.11",
+    "@prisma/orm-postgres": "^8.0.0-rc.11",
     "clsx": "^2.1.1",
     "dotenv": "^18.0.1",
     "framer-motion": "^13.4.0",

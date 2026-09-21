@@ -1,119 +1,152 @@
 {
   "schemaVersion": "1",
   "targetFamily": "sql",
-  "target": "sqlite",
-  "profileHash": "260b8608d1aacaf1f690779a6cff39a12947c599597c5ba464ca75b9e775df53",
+  "target": "postgres",
+  "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
     "attempt": {
       "model": "Attempt",
-      "namespace": "__unbound__"
+      "namespace": "public"
     },
     "diagnosticSession": {
       "model": "DiagnosticSession",
-      "namespace": "__unbound__"
+      "namespace": "public"
     },
     "intervention": {
       "model": "Intervention",
-      "namespace": "__unbound__"
+      "namespace": "public"
     },
     "learnerProfile": {
       "model": "LearnerProfile",
-      "namespace": "__unbound__"
-    },
-    "question": {
-      "model": "Question",
-      "namespace": "__unbound__"
+      "namespace": "public"
     },
     "student": {
       "model": "Student",
-      "namespace": "__unbound__"
+      "namespace": "public"
     }
   },
   "domain": {
     "namespaces": {
-      "__unbound__": {
+      "public": {
         "models": {
           "Attempt": {
             "fields": {
               "correct": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/integer@1",
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
               "createdAt": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "diagnosisJson": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "diagnosticId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "inferredConfidence": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "inferredMasterySignal": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "interventionId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "purpose": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "questionId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "responseTimeSeconds": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/integer@1",
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
               "selectedOption": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "studentId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "telemetryJson": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
             },
             "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "diagnosticId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "DiagnosticSession",
+                  "namespace": "public"
+                }
+              },
               "student": {
                 "cardinality": "N:1",
                 "nullable": false,
@@ -127,7 +160,7 @@
                 },
                 "to": {
                   "model": "Student",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               }
             },
@@ -138,6 +171,9 @@
                 },
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "diagnosisJson": {
+                  "column": "diagnosisJson"
                 },
                 "diagnosticId": {
                   "column": "diagnosticId"
@@ -150,6 +186,12 @@
                 },
                 "inferredMasterySignal": {
                   "column": "inferredMasterySignal"
+                },
+                "interventionId": {
+                  "column": "interventionId"
+                },
+                "purpose": {
+                  "column": "purpose"
                 },
                 "questionId": {
                   "column": "questionId"
@@ -167,7 +209,7 @@
                   "column": "telemetryJson"
                 }
               },
-              "namespaceId": "__unbound__",
+              "namespaceId": "public",
               "table": "attempt"
             }
           },
@@ -176,40 +218,62 @@
               "completedAt": {
                 "nullable": true,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "createdAt": {
-                "nullable": false,
+              "completedInSeconds": {
+                "nullable": true,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "startedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "studentId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "subject": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
             },
             "relations": {
+              "attempts": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "diagnosticId"
+                  ]
+                },
+                "to": {
+                  "model": "Attempt",
+                  "namespace": "public"
+                }
+              },
               "student": {
                 "cardinality": "N:1",
                 "nullable": false,
@@ -223,7 +287,7 @@
                 },
                 "to": {
                   "model": "Student",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               }
             },
@@ -232,11 +296,14 @@
                 "completedAt": {
                   "column": "completedAt"
                 },
-                "createdAt": {
-                  "column": "createdAt"
+                "completedInSeconds": {
+                  "column": "completedInSeconds"
                 },
                 "id": {
                   "column": "id"
+                },
+                "startedAt": {
+                  "column": "startedAt"
                 },
                 "studentId": {
                   "column": "studentId"
@@ -245,7 +312,7 @@
                   "column": "subject"
                 }
               },
-              "namespaceId": "__unbound__",
+              "namespaceId": "public",
               "table": "diagnosticSession"
             }
           },
@@ -254,70 +321,70 @@
               "actionType": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "completedAt": {
                 "nullable": true,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "contentJson": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "improved": {
                 "nullable": true,
                 "type": {
-                  "codecId": "sqlite/integer@1",
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
               "masteryAfter": {
                 "nullable": true,
                 "type": {
-                  "codecId": "sqlite/real@1",
+                  "codecId": "pg/float8@1",
                   "kind": "scalar"
                 }
               },
               "masteryBefore": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/real@1",
+                  "codecId": "pg/float8@1",
                   "kind": "scalar"
                 }
               },
               "startedAt": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "studentId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "topic": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -336,7 +403,7 @@
                 },
                 "to": {
                   "model": "Student",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               }
             },
@@ -373,7 +440,7 @@
                   "column": "topic"
                 }
               },
-              "namespaceId": "__unbound__",
+              "namespaceId": "public",
               "table": "intervention"
             }
           },
@@ -382,49 +449,56 @@
               "byTopicJson": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "headlineDiagnosisJson": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "overallJson": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "profileConfidence": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/real@1",
+                  "codecId": "pg/float8@1",
                   "kind": "scalar"
                 }
               },
               "readinessIndex": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/integer@1",
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
               "studentId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "updatedAt": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -443,7 +517,7 @@
                 },
                 "to": {
                   "model": "Student",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               }
             },
@@ -451,6 +525,9 @@
               "fields": {
                 "byTopicJson": {
                   "column": "byTopicJson"
+                },
+                "headlineDiagnosisJson": {
+                  "column": "headlineDiagnosisJson"
                 },
                 "id": {
                   "column": "id"
@@ -471,139 +548,8 @@
                   "column": "updatedAt"
                 }
               },
-              "namespaceId": "__unbound__",
+              "namespaceId": "public",
               "table": "learnerProfile"
-            }
-          },
-          "Question": {
-            "fields": {
-              "concept": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "correctOption": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "difficulty": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "distractorsJson": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "estimatedTimeSeconds": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/integer@1",
-                  "kind": "scalar"
-                }
-              },
-              "explanation": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "id": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "optionsJson": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "questionText": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "subject": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "subtopic": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "topic": {
-                "nullable": false,
-                "type": {
-                  "codecId": "sqlite/text@1",
-                  "kind": "scalar"
-                }
-              }
-            },
-            "relations": {},
-            "storage": {
-              "fields": {
-                "concept": {
-                  "column": "concept"
-                },
-                "correctOption": {
-                  "column": "correctOption"
-                },
-                "difficulty": {
-                  "column": "difficulty"
-                },
-                "distractorsJson": {
-                  "column": "distractorsJson"
-                },
-                "estimatedTimeSeconds": {
-                  "column": "estimatedTimeSeconds"
-                },
-                "explanation": {
-                  "column": "explanation"
-                },
-                "id": {
-                  "column": "id"
-                },
-                "optionsJson": {
-                  "column": "optionsJson"
-                },
-                "questionText": {
-                  "column": "questionText"
-                },
-                "subject": {
-                  "column": "subject"
-                },
-                "subtopic": {
-                  "column": "subtopic"
-                },
-                "topic": {
-                  "column": "topic"
-                }
-              },
-              "namespaceId": "__unbound__",
-              "table": "question"
             }
           },
           "Student": {
@@ -611,42 +557,42 @@
               "createdAt": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "id": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "name": {
                 "nullable": true,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "subjects": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "targetExam": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
               "targetScore": {
                 "nullable": false,
                 "type": {
-                  "codecId": "sqlite/integer@1",
+                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               }
@@ -664,7 +610,7 @@
                 },
                 "to": {
                   "model": "Attempt",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               },
               "interventions": {
@@ -679,7 +625,7 @@
                 },
                 "to": {
                   "model": "Intervention",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               },
               "profile": {
@@ -695,7 +641,7 @@
                 },
                 "to": {
                   "model": "LearnerProfile",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               },
               "sessions": {
@@ -710,7 +656,7 @@
                 },
                 "to": {
                   "model": "DiagnosticSession",
-                  "namespace": "__unbound__"
+                  "namespace": "public"
                 }
               }
             },
@@ -735,7 +681,7 @@
                   "column": "targetScore"
                 }
               },
-              "namespaceId": "__unbound__",
+              "namespaceId": "public",
               "table": "student"
             }
           }
@@ -745,67 +691,78 @@
   },
   "storage": {
     "namespaces": {
-      "__unbound__": {
+      "public": {
         "entries": {
           "table": {
             "attempt": {
               "columns": {
                 "correct": {
-                  "codecId": "sqlite/integer@1",
-                  "nativeType": "integer",
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
                   "nullable": false
                 },
                 "createdAt": {
-                  "codecId": "sqlite/datetime@1",
-                  "default": {
-                    "expression": "now()",
-                    "kind": "function"
-                  },
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
+                "diagnosisJson": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "diagnosticId": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "id": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "inferredConfidence": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "inferredMasterySignal": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "interventionId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "purpose": {
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "questionId": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "responseTimeSeconds": {
-                  "codecId": "sqlite/integer@1",
-                  "nativeType": "integer",
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
                   "nullable": false
                 },
                 "selectedOption": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": false
+                  "nullable": true
                 },
                 "studentId": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "telemetryJson": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 }
@@ -816,15 +773,31 @@
                     "columns": [
                       "studentId"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "attempt"
                   },
                   "target": {
                     "columns": [
                       "id"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "student"
+                  }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "diagnosticId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "attempt"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "diagnosticSession"
                   }
                 }
               ],
@@ -856,31 +829,32 @@
             "diagnosticSession": {
               "columns": {
                 "completedAt": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
                 },
-                "createdAt": {
-                  "codecId": "sqlite/datetime@1",
-                  "default": {
-                    "expression": "now()",
-                    "kind": "function"
-                  },
+                "completedInSeconds": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
-                "id": {
-                  "codecId": "sqlite/text@1",
+                "startedAt": {
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "studentId": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "subject": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 }
@@ -891,14 +865,14 @@
                     "columns": [
                       "studentId"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "diagnosticSession"
                   },
                   "target": {
                     "columns": [
                       "id"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "student"
                   }
                 }
@@ -923,56 +897,52 @@
             "intervention": {
               "columns": {
                 "actionType": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "completedAt": {
-                  "codecId": "sqlite/datetime@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
                 },
                 "contentJson": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "id": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "improved": {
-                  "codecId": "sqlite/integer@1",
-                  "nativeType": "integer",
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
                   "nullable": true
                 },
                 "masteryAfter": {
-                  "codecId": "sqlite/real@1",
-                  "nativeType": "real",
+                  "codecId": "pg/float8@1",
+                  "nativeType": "float8",
                   "nullable": true
                 },
                 "masteryBefore": {
-                  "codecId": "sqlite/real@1",
-                  "nativeType": "real",
+                  "codecId": "pg/float8@1",
+                  "nativeType": "float8",
                   "nullable": false
                 },
                 "startedAt": {
-                  "codecId": "sqlite/datetime@1",
-                  "default": {
-                    "expression": "now()",
-                    "kind": "function"
-                  },
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "studentId": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "topic": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 }
@@ -983,14 +953,14 @@
                     "columns": [
                       "studentId"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "intervention"
                   },
                   "target": {
                     "columns": [
                       "id"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "student"
                   }
                 }
@@ -1015,41 +985,42 @@
             "learnerProfile": {
               "columns": {
                 "byTopicJson": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
+                "headlineDiagnosisJson": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "overallJson": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "profileConfidence": {
-                  "codecId": "sqlite/real@1",
-                  "nativeType": "real",
+                  "codecId": "pg/float8@1",
+                  "nativeType": "float8",
                   "nullable": false
                 },
                 "readinessIndex": {
-                  "codecId": "sqlite/integer@1",
-                  "nativeType": "integer",
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
                   "nullable": false
                 },
                 "studentId": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "updatedAt": {
-                  "codecId": "sqlite/datetime@1",
-                  "default": {
-                    "expression": "now()",
-                    "kind": "function"
-                  },
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 }
@@ -1060,14 +1031,14 @@
                     "columns": [
                       "studentId"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "learnerProfile"
                   },
                   "target": {
                     "columns": [
                       "id"
                     ],
-                    "namespaceId": "__unbound__",
+                    "namespaceId": "public",
                     "tableName": "student"
                   }
                 }
@@ -1086,115 +1057,30 @@
                 }
               ]
             },
-            "question": {
-              "columns": {
-                "concept": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "correctOption": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "difficulty": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "distractorsJson": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "estimatedTimeSeconds": {
-                  "codecId": "sqlite/integer@1",
-                  "nativeType": "integer",
-                  "nullable": false
-                },
-                "explanation": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "id": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "optionsJson": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "questionText": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "subject": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "subtopic": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "topic": {
-                  "codecId": "sqlite/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                }
-              },
-              "foreignKeys": [],
-              "indexes": [
-                {
-                  "columns": [
-                    "topic"
-                  ],
-                  "name": "question_topic_idx_655aa1bc",
-                  "prefix": "question_topic_idx",
-                  "unique": false
-                }
-              ],
-              "primaryKey": {
-                "columns": [
-                  "id"
-                ]
-              },
-              "uniques": []
-            },
             "student": {
               "columns": {
                 "createdAt": {
-                  "codecId": "sqlite/datetime@1",
-                  "default": {
-                    "expression": "now()",
-                    "kind": "function"
-                  },
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "id": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "name": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
                 },
                 "subjects": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "targetExam": {
-                  "codecId": "sqlite/text@1",
+                  "codecId": "pg/text@1",
                   "default": {
                     "kind": "literal",
                     "value": "JAMB"
@@ -1203,8 +1089,8 @@
                   "nullable": false
                 },
                 "targetScore": {
-                  "codecId": "sqlite/integer@1",
-                  "nativeType": "integer",
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
                   "nullable": false
                 }
               },
@@ -1219,18 +1105,28 @@
             }
           }
         },
-        "id": "__unbound__"
+        "id": "public",
+        "kind": "postgres-schema"
       }
     },
-    "storageHash": "855666c61b92820aebdb9af4ff8138123d7e624b999d6c4bf38a3e5987fb865c"
+    "storageHash": "c90dc762684d433b587cad8baead46ba89f05924a2a6e566a38db4fe33824000"
   },
   "capabilities": {
-    "sql": {
-      "foreignKeys": true,
+    "postgres": {
+      "distinctOn": true,
       "jsonAgg": true,
+      "lateral": true,
       "limit": true,
       "orderBy": true,
       "returning": true
+    },
+    "sql": {
+      "checkConstraint": true,
+      "defaultInInsert": true,
+      "enums": true,
+      "lateral": true,
+      "returning": true,
+      "scalarList": true
     }
   },
   "extensions": {},

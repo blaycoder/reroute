@@ -1,4 +1,4 @@
-import type { Confidence } from "@/types/learner-state";
+import type { Confidence, TimePressureSignal } from "@/types/learner-state";
 
 // Deterministic confidence inference from raw interaction telemetry.
 // Confidence is system-inferred from behaviour — never self-reported.
@@ -46,21 +46,38 @@ export type MasterySignal = "up" | "slight-up" | "flag" | "gap";
 /**
  * Map correctness × inferred confidence to a mastery signal.
  *
- * correct + high  -> 'up'         (strong evidence of mastery)
- * correct + low   -> 'slight-up'  (right answer, shaky process)
- * wrong  + high   -> 'flag'       (confidently wrong — misconception signal)
- * wrong  + low    -> 'gap'        (knowledge gap)
- *
- * Medium confidence weakens the evidence in both directions, so it never
- * produces the strong signals: correct + medium -> 'slight-up',
- * wrong + medium -> 'gap'.
+ * correct + high   -> 'up'         (strong evidence of mastery)
+ * correct + medium -> 'up'
+ * correct + low    -> 'slight-up'  (right answer, shaky process)
+ * wrong  + high    -> 'flag'       (confidently wrong — misconception signal)
+ * wrong  + medium  -> 'flag'
+ * wrong  + low     -> 'gap'        (knowledge gap)
  */
 export function inferMasterySignal(
   correct: boolean,
   inferredConfidence: Confidence,
 ): MasterySignal {
   if (correct) {
-    return inferredConfidence === "high" ? "up" : "slight-up";
+    return inferredConfidence === "low" ? "slight-up" : "up";
   }
-  return inferredConfidence === "high" ? "flag" : "gap";
+  return inferredConfidence === "low" ? "gap" : "flag";
+}
+
+/**
+ * How much of the question's time was left when the student locked in.
+ *   more than 30% left -> 'none'
+ *   10% to 30% left    -> 'mild'
+ *   under 10% left     -> 'severe'
+ * Derived from raw timing on the server, so it cannot be spoofed by the client.
+ */
+export function inferTimePressure(input: {
+  timeOnQuestionMs: number;
+  estimatedTimeSeconds: number;
+}): TimePressureSignal {
+  const totalMs = input.estimatedTimeSeconds * 1000;
+  if (totalMs <= 0) return "none";
+  const remainingFraction = (totalMs - input.timeOnQuestionMs) / totalMs;
+  if (remainingFraction > 0.3) return "none";
+  if (remainingFraction >= 0.1) return "mild";
+  return "severe";
 }

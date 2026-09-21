@@ -1,21 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { apiFetch } from "@/lib/api-client";
+import {
+  ApiRecovery,
+  SavedContentNotice,
+  useRetryCounter,
+} from "@/components/ui/ApiRecovery";
+import { ApiUnavailableError, apiFetch, readCached } from "@/lib/api-client";
+import { AIDiagnosisCard } from "@/components/fingerprint/AIDiagnosisCard";
 import { FingerprintBar } from "@/components/fingerprint/FingerprintBar";
 import { PriorityCallout } from "@/components/fingerprint/PriorityCallout";
 import { cn, FOCUS_RING } from "@/design/utils";
 import { tokens } from "@/design/tokens";
 import type {
-  DiagnosticStartResponse,
+  DiagnosticCompleteResponse,
   FingerprintResponse,
-  LearnerProfileSummary,
 } from "@/types/api";
 import type { ErrorType } from "@/types/learner-state";
 
@@ -23,11 +28,7 @@ const DIAGNOSTIC_KEY = "reroute.diagnostic";
 const FINGERPRINT_KEY = "reroute.fingerprint";
 const INTERVENTION_KEY = "reroute.intervention";
 
-interface StoredComplete {
-  learnerProfile: LearnerProfileSummary;
-  readinessIndex: number;
-  priorityTopic: string;
-}
+type StoredComplete = DiagnosticCompleteResponse;
 
 const ERROR_TYPE_LINES: Record<ErrorType, string> = {
   conceptual: "Concept gaps are behind most wrong answers here.",
@@ -44,24 +45,52 @@ export default function FingerprintPage() {
   const [data, setData] = useState<FingerprintResponse | null>(null);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [usingSaved, setUsingSaved] = useState(false);
+  const retries = useRetryCounter();
+  const studentIdRef = useRef<string | null>(null);
+
+  const fingerprintPath = (id: string) => `/api/learner/${id}/fingerprint`;
+
+  const load = useCallback(
+    async (id: string) => {
+      setFailed(false);
+      try {
+        const fetched = await apiFetch<FingerprintResponse>(
+          fingerprintPath(id),
+          undefined,
+          { cache: true },
+        );
+        setData(fetched);
+        setStudentId(id);
+        setUsingSaved(false);
+        setPhase("ready");
+      } catch (error) {
+        if (error instanceof ApiUnavailableError) {
+          setFailed(true);
+          return;
+        }
+        showToast({
+          variant: "error",
+          message: "We couldn't load your fingerprint yet. Complete a diagnostic first.",
+        });
+        router.replace("/onboarding");
+      }
+    },
+    [router, showToast],
+  );
 
   useEffect(() => {
     const diagnosticRaw = sessionStorage.getItem(DIAGNOSTIC_KEY);
     const fingerprintRaw = sessionStorage.getItem(FINGERPRINT_KEY);
     const storedStudentId = diagnosticRaw
-      ? ((JSON.parse(diagnosticRaw) as DiagnosticStartResponse).studentId ?? null)
+      ? ((JSON.parse(diagnosticRaw) as { studentId?: string }).studentId ?? null)
       : null;
+    studentIdRef.current = storedStudentId;
 
     if (fingerprintRaw) {
       const stored = JSON.parse(fingerprintRaw) as StoredComplete;
-      setData({
-        overall: stored.learnerProfile.overall,
-        byTopic: stored.learnerProfile.byTopic,
-        readinessIndex: stored.readinessIndex,
-        profileConfidence: stored.learnerProfile.profileConfidence,
-        priorityTopic: stored.priorityTopic,
-        interventionHistory: stored.learnerProfile.interventionHistory,
-      });
+      setData({ ...stored.learnerProfile, priorityTopic: stored.priorityTopic });
       setStudentId(storedStudentId);
       setPhase("ready");
       return;
@@ -72,21 +101,33 @@ export default function FingerprintPage() {
       return;
     }
 
-    (async () => {
-      const fetchedFingerprint = await apiFetch<FingerprintResponse>(
-        `/api/learner/${storedStudentId}/fingerprint`,
-      );
-      setData(fetchedFingerprint);
-      setStudentId(storedStudentId);
-      setPhase("ready");
-    })().catch(() => {
-      showToast({
-        variant: "error",
-        message: "We couldn't load your fingerprint yet. Complete a diagnostic first.",
-      });
-      router.replace("/onboarding");
-    });
-  }, [router, showToast]);
+    void load(storedStudentId);
+  }, [load, router]);
+
+  const resetRetries = retries.reset;
+  useEffect(() => {
+    if (!failed) resetRetries();
+  }, [failed, resetRetries]);
+
+  const handleRetry = () => {
+    retries.bump();
+    if (studentIdRef.current) void load(studentIdRef.current);
+  };
+
+  // The student's own last fingerprint, offered only after repeated retries.
+  const savedFingerprint =
+    failed && studentIdRef.current
+      ? readCached<FingerprintResponse>(fingerprintPath(studentIdRef.current))
+      : null;
+
+  const resumeFromSaved = () => {
+    if (!savedFingerprint) return;
+    setData(savedFingerprint);
+    setStudentId(studentIdRef.current);
+    setUsingSaved(true);
+    setFailed(false);
+    setPhase("ready");
+  };
 
   const confidenceWord = !data
     ? "growing"
@@ -114,15 +155,24 @@ export default function FingerprintPage() {
     if (!data || !priorityTopic || !studentId) return;
     sessionStorage.setItem(
       INTERVENTION_KEY,
-      JSON.stringify({
-        studentId,
-        topic: priorityTopic,
-        errorType: priorityProfile?.errorType ?? "conceptual",
-        confidence: priorityProfile?.confidence ?? "medium",
-      }),
+      JSON.stringify({ studentId, topic: priorityTopic }),
     );
     router.push("/intervention");
-  }, [data, priorityTopic, priorityProfile, studentId, router]);
+  }, [data, priorityTopic, studentId, router]);
+
+  if (failed) {
+    return (
+      <main className="flex min-h-screen flex-col justify-center bg-background px-lg">
+        <div className="mx-auto w-full max-w-md">
+          <ApiRecovery
+            retryCount={retries.count}
+            onRetry={handleRetry}
+            onUseCached={savedFingerprint ? resumeFromSaved : undefined}
+          />
+        </div>
+      </main>
+    );
+  }
 
   if (phase === "booting") {
     return (
@@ -159,6 +209,7 @@ export default function FingerprintPage() {
         <p className="mt-lg inline-flex w-fit items-center rounded-pill bg-surfaceMuted px-md text-micro leading-relaxed text-textMuted">
           Profile confidence: {confidenceWord}
         </p>
+        {usingSaved && <SavedContentNotice className="mt-md self-start" />}
 
         <Card className="mt-xl">
           <div className="flex items-center justify-between gap-sm">
@@ -220,6 +271,10 @@ export default function FingerprintPage() {
             <p className="text-small text-textMuted">Whether you know what you know.</p>
           </div>
         </div>
+
+        {data.headlineDiagnosis && (
+          <AIDiagnosisCard className="mt-xl" diagnosis={data.headlineDiagnosis} />
+        )}
 
         {priorityTopic && (
           <PriorityCallout

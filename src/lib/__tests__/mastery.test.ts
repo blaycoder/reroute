@@ -26,6 +26,9 @@ function makeAttempt(overrides: Partial<Attempt> = {}): Attempt {
       idleBeforeSubmitMs: 0,
       answerChanges: [],
       wasSubmitted: true,
+      timeOnQuestionMs: 25_000,
+      timedOut: false,
+      timePressureSignal: "none",
     },
     timestamp: "2026-09-16T00:00:00.000Z",
     ...overrides,
@@ -199,7 +202,7 @@ describe("computeConfidenceCalibration", () => {
 });
 
 describe("TOPIC_IMPACT_WEIGHTS", () => {
-  it("carries the demo weights", () => {
+  it("carries the per-topic impact weights", () => {
     expect(TOPIC_IMPACT_WEIGHTS).toEqual({
       Algebra: 1.3,
       Geometry: 0.8,

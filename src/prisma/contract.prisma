@@ -1,13 +1,19 @@
-// Storage mirror of src/types. Structured fields that SQLite can't express
-// natively (JSON shapes, enums) are stored as serialized JSON strings or
-// plain strings — same shape works when the target flips to Postgres.
-// Attempt.questionId deliberately has no FK relation: the question bank's
-// source of truth is src/data/questions.json, and attempts must survive
-// question edits.
+// Storage mirror of src/types. Structured fields that Postgres can't express
+// as plain columns (JSON shapes, enums) are stored as serialized JSON strings
+// or plain strings.
 //
-// SQLite's PSL target cannot generate ids or set Boolean columns yet, so ids
-// are assigned by the app (newId() in src/lib/db.ts) and booleans are stored
-// as Int 0/1.
+// There is no Question table: the question bank is code
+// (src/data/question-bank.ts), so answer keys never live in the database and
+// there is nothing to seed. Attempt.questionId is therefore a plain string —
+// attempts must survive question edits.
+//
+// Three deliberate choices, all so the app never depends on runtime features
+// that Node 24 (Vercel's newest) doesn't have:
+//   - Ids are assigned by the app (newId() in src/lib/db.ts).
+//   - Booleans are stored as Int 0/1 (PSL has no Boolean type yet).
+//   - Timestamps are ISO-8601 UTC text set by the app (nowIso()). On Postgres a
+//     DateTime column reads back as a `Temporal` object, which Node 24 lacks;
+//     text sorts correctly and needs no polyfill.
 
 model Student {
   id            String              @id
@@ -15,80 +21,74 @@ model Student {
   targetExam    String              @default("JAMB")
   targetScore   Int
   subjects      String // JSON array
-  createdAt     DateTime            @default(now())
+  createdAt     String // ISO 8601 UTC
   attempts      Attempt[]
   interventions Intervention[]
   profile       LearnerProfile?
   sessions      DiagnosticSession[]
 }
 
+// One real diagnostic run. Everything the fingerprint shows is computed from
+// the Attempt rows that belong to a session — there is no seeded state.
 model DiagnosticSession {
-  id          String    @id
-  studentId   String
-  student     Student   @relation(fields: [studentId], references: [id])
-  subject     String
-  createdAt   DateTime  @default(now())
-  completedAt DateTime?
-}
-
-model Question {
-  id                   String @id
-  subject              String
-  topic                String
-  subtopic             String
-  concept              String
-  difficulty           String // 'easy' | 'medium' | 'hard'
-  estimatedTimeSeconds Int
-  questionText         String
-  optionsJson          String // Record<string, string>
-  correctOption        String
-  distractorsJson      String // Distractor[]
-  explanation          String
-
-  @@index([topic])
+  id                 String    @id
+  studentId          String
+  student            Student   @relation(fields: [studentId], references: [id])
+  subject            String
+  startedAt          String // ISO 8601 UTC
+  completedAt        String? // ISO 8601 UTC
+  completedInSeconds Int?
+  attempts           Attempt[]
 }
 
 model Attempt {
-  id                    String   @id
+  id                    String            @id
   studentId             String
-  student               Student  @relation(fields: [studentId], references: [id])
-  questionId            String
+  student               Student           @relation(fields: [studentId], references: [id])
   diagnosticId          String
-  selectedOption        String
-  correct               Int // 0 | 1 — PSL has no Boolean type yet
+  session               DiagnosticSession @relation(fields: [diagnosticId], references: [id])
+  interventionId        String? // set for practice / reassessment attempts
+  questionId            String
+  purpose               String // 'diagnostic' | 'practice' | 'reassessment'
+  selectedOption        String? // null when the timer ran out with nothing selected
+  correct               Int // 0 | 1
   responseTimeSeconds   Int
   inferredConfidence    String // Confidence
   inferredMasterySignal String // 'up' | 'slight-up' | 'flag' | 'gap'
   telemetryJson         String // AttemptTelemetry
-  createdAt             DateTime @default(now())
+  diagnosisJson         String? // AIDiagnosis, filled in when a diagnostic completes
+  createdAt             String // ISO 8601 UTC
 
   @@index([studentId])
   @@index([diagnosticId])
 }
 
+// Computed cache of the learner's profile, rebuilt from attempts by
+// computeLearnerProfile() — never written from a fixture.
 model LearnerProfile {
-  id                String   @id
-  studentId         String   @unique
-  student           Student  @relation(fields: [studentId], references: [id])
-  overallJson       String // LearnerState['learnerProfile']['overall']
-  byTopicJson       String // Record<string, TopicProfile>
-  readinessIndex    Int
-  profileConfidence Float
-  updatedAt         DateTime @default(now())
+  id                    String  @id
+  studentId             String  @unique
+  student               Student @relation(fields: [studentId], references: [id])
+  overallJson           String // LearnerState['learnerProfile']['overall']
+  byTopicJson           String // Record<string, TopicProfile>
+  headlineDiagnosisJson String? // HeadlineDiagnosis | null
+  readinessIndex        Int
+  profileConfidence     Float
+  updatedAt             String // ISO 8601 UTC
 }
 
 model Intervention {
-  id            String    @id
+  id            String  @id
   studentId     String
-  student       Student   @relation(fields: [studentId], references: [id])
+  student       Student @relation(fields: [studentId], references: [id])
   topic         String
-  actionType    String // 'intervention' | 'practice' | 'reassess'
-  contentJson   String // Intervention (src/types/api.ts)
-  startedAt     DateTime  @default(now())
-  completedAt   DateTime?
+  actionType    String // NextAction
+  contentJson   String // StoredIntervention (src/lib/intervention-content.ts)
+  startedAt     String // ISO 8601 UTC
+  completedAt   String? // ISO 8601 UTC
   masteryBefore Float
   masteryAfter  Float?
-  improved      Int? // 0 | 1 — PSL has no Boolean type yet
+  improved      Int? // 0 | 1
 
   @@index([studentId])
 }

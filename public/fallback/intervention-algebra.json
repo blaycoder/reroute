@@ -1,11 +1,10 @@
 {
-  "concept": "distributing_negative_coefficient",
-  "explanation": "It looks like when you distributed $-4$ through the second bracket, the sign on the constant term flipped the wrong way. Try expanding $-4(x + 2)$ on its own first, one term at a time — what do you get when $-4$ multiplies $+2$?",
+  "topic": "Algebra",
+  "conceptLabel": "distributing negative coefficients",
+  "explanation": "When a bracket has a negative number outside it, that negative multiplies every term inside. The sign of each term flips, including the constant at the end. Try expanding $-4(x + 2)$ on its own first, one term at a time — what do you get when $-4$ multiplies $+2$?",
   "workedExample": "Let's check a simpler one: $-2(x + 3)$. Distribute $-2$ across both terms: $-2 \\cdot x = -2x$, and $-2 \\cdot 3 = -6$. So the result is $-2x - 6$.",
   "guidedQuestion": "Now try: what is $-3(x - 4)$?",
-  "practiceQuestions": [
-    "Simplify: $-2(x + 5)$",
-    "Simplify: $-4(2x - 3)$",
-    "Simplify: $-5(x + 1) + 2x$"
-  ]
+  "guidedQuestionId": "g_alg_001",
+  "practiceQuestionIds": ["p_alg_001", "p_alg_002", "p_alg_003"],
+  "reassessmentQuestionIds": ["r_alg_001", "r_alg_002", "r_alg_003"]
 }
