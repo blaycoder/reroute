@@ -1,0 +1,622 @@
+[
+  {
+    "id": "schema.public",
+    "label": "Create schema \"public\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [],
+    "execute": [
+      {
+        "description": "Create schema \"public\"",
+        "sql": "CREATE SCHEMA IF NOT EXISTS \"public\"",
+        "params": []
+      }
+    ],
+    "postcheck": []
+  },
+  {
+    "id": "table.attempt",
+    "label": "Create table \"attempt\"",
+    "summary": "Creates table \"attempt\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "attempt"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"attempt\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"attempt\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"attempt\"",
+        "sql": "CREATE TABLE \"public\".\"attempt\" (\n  \"correct\" int4 NOT NULL,\n  \"createdAt\" text NOT NULL,\n  \"diagnosisJson\" text,\n  \"diagnosticId\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"inferredConfidence\" text NOT NULL,\n  \"inferredMasterySignal\" text NOT NULL,\n  \"interventionId\" text,\n  \"purpose\" text NOT NULL,\n  \"questionId\" text NOT NULL,\n  \"responseTimeSeconds\" int4 NOT NULL,\n  \"selectedOption\" text,\n  \"studentId\" text NOT NULL,\n  \"telemetryJson\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"attempt\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"attempt\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.diagnosticSession",
+    "label": "Create table \"diagnosticSession\"",
+    "summary": "Creates table \"diagnosticSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "diagnosticSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"diagnosticSession\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"diagnosticSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"diagnosticSession\"",
+        "sql": "CREATE TABLE \"public\".\"diagnosticSession\" (\n  \"completedAt\" text,\n  \"completedInSeconds\" int4,\n  \"id\" text NOT NULL,\n  \"startedAt\" text NOT NULL,\n  \"studentId\" text NOT NULL,\n  \"subject\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"diagnosticSession\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"diagnosticSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.intervention",
+    "label": "Create table \"intervention\"",
+    "summary": "Creates table \"intervention\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "intervention"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"intervention\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"intervention\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"intervention\"",
+        "sql": "CREATE TABLE \"public\".\"intervention\" (\n  \"actionType\" text NOT NULL,\n  \"completedAt\" text,\n  \"contentJson\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"improved\" int4,\n  \"masteryAfter\" float8,\n  \"masteryBefore\" float8 NOT NULL,\n  \"startedAt\" text NOT NULL,\n  \"studentId\" text NOT NULL,\n  \"topic\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"intervention\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"intervention\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.learnerProfile",
+    "label": "Create table \"learnerProfile\"",
+    "summary": "Creates table \"learnerProfile\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "learnerProfile"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"learnerProfile\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"learnerProfile\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"learnerProfile\"",
+        "sql": "CREATE TABLE \"public\".\"learnerProfile\" (\n  \"byTopicJson\" text NOT NULL,\n  \"headlineDiagnosisJson\" text,\n  \"id\" text NOT NULL,\n  \"overallJson\" text NOT NULL,\n  \"profileConfidence\" float8 NOT NULL,\n  \"readinessIndex\" int4 NOT NULL,\n  \"studentId\" text NOT NULL,\n  \"updatedAt\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"learnerProfile\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"learnerProfile\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.student",
+    "label": "Create table \"student\"",
+    "summary": "Creates table \"student\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "student"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"student\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"student\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"student\"",
+        "sql": "CREATE TABLE \"public\".\"student\" (\n  \"createdAt\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"name\" text,\n  \"subjects\" text NOT NULL,\n  \"targetExam\" text DEFAULT 'JAMB' NOT NULL,\n  \"targetScore\" int4 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"student\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"student\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.learnerProfile.learnerProfile_studentId_key",
+    "label": "Add unique constraint on \"learnerProfile\" (studentId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "learnerProfile_studentId_key",
+        "table": "learnerProfile"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"learnerProfile_studentId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "learnerProfile_studentId_key",
+          "public",
+          "\"public\".\"learnerProfile\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"learnerProfile_studentId_key\"",
+        "sql": "ALTER TABLE \"public\".\"learnerProfile\" ADD CONSTRAINT \"learnerProfile_studentId_key\" UNIQUE (\"studentId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"learnerProfile_studentId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "learnerProfile_studentId_key",
+          "public",
+          "\"public\".\"learnerProfile\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.attempt.attempt_diagnosticId_idx_928861a5",
+    "label": "Create index \"attempt_diagnosticId_idx_928861a5\" on \"attempt\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "attempt_diagnosticId_idx_928861a5",
+        "table": "attempt"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"attempt_diagnosticId_idx_928861a5\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"attempt_diagnosticId_idx_928861a5\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"attempt_diagnosticId_idx_928861a5\"",
+        "sql": "CREATE INDEX \"attempt_diagnosticId_idx_928861a5\" ON \"public\".\"attempt\" (\"diagnosticId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"attempt_diagnosticId_idx_928861a5\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"attempt_diagnosticId_idx_928861a5\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.attempt.attempt_studentId_idx_bf255322",
+    "label": "Create index \"attempt_studentId_idx_bf255322\" on \"attempt\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "attempt_studentId_idx_bf255322",
+        "table": "attempt"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"attempt_studentId_idx_bf255322\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"attempt_studentId_idx_bf255322\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"attempt_studentId_idx_bf255322\"",
+        "sql": "CREATE INDEX \"attempt_studentId_idx_bf255322\" ON \"public\".\"attempt\" (\"studentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"attempt_studentId_idx_bf255322\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"attempt_studentId_idx_bf255322\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.diagnosticSession.diagnosticSession_studentId_idx_bf255322",
+    "label": "Create index \"diagnosticSession_studentId_idx_bf255322\" on \"diagnosticSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "diagnosticSession_studentId_idx_bf255322",
+        "table": "diagnosticSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"diagnosticSession_studentId_idx_bf255322\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"diagnosticSession_studentId_idx_bf255322\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"diagnosticSession_studentId_idx_bf255322\"",
+        "sql": "CREATE INDEX \"diagnosticSession_studentId_idx_bf255322\" ON \"public\".\"diagnosticSession\" (\"studentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"diagnosticSession_studentId_idx_bf255322\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"diagnosticSession_studentId_idx_bf255322\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.intervention.intervention_studentId_idx_bf255322",
+    "label": "Create index \"intervention_studentId_idx_bf255322\" on \"intervention\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "intervention_studentId_idx_bf255322",
+        "table": "intervention"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"intervention_studentId_idx_bf255322\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"intervention_studentId_idx_bf255322\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"intervention_studentId_idx_bf255322\"",
+        "sql": "CREATE INDEX \"intervention_studentId_idx_bf255322\" ON \"public\".\"intervention\" (\"studentId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"intervention_studentId_idx_bf255322\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"intervention_studentId_idx_bf255322\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.attempt.attempt_studentId_fkey",
+    "label": "Add foreign key \"attempt_studentId_fkey\" on \"attempt\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "attempt_studentId_fkey",
+        "table": "attempt"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"attempt_studentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "attempt_studentId_fkey",
+          "public",
+          "\"public\".\"attempt\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"attempt_studentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"attempt\"\nADD CONSTRAINT \"attempt_studentId_fkey\"\nFOREIGN KEY (\"studentId\")\nREFERENCES \"public\".\"student\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"attempt_studentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "attempt_studentId_fkey",
+          "public",
+          "\"public\".\"attempt\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.attempt.attempt_diagnosticId_fkey",
+    "label": "Add foreign key \"attempt_diagnosticId_fkey\" on \"attempt\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "attempt_diagnosticId_fkey",
+        "table": "attempt"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"attempt_diagnosticId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "attempt_diagnosticId_fkey",
+          "public",
+          "\"public\".\"attempt\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"attempt_diagnosticId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"attempt\"\nADD CONSTRAINT \"attempt_diagnosticId_fkey\"\nFOREIGN KEY (\"diagnosticId\")\nREFERENCES \"public\".\"diagnosticSession\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"attempt_diagnosticId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "attempt_diagnosticId_fkey",
+          "public",
+          "\"public\".\"attempt\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.diagnosticSession.diagnosticSession_studentId_fkey",
+    "label": "Add foreign key \"diagnosticSession_studentId_fkey\" on \"diagnosticSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "diagnosticSession_studentId_fkey",
+        "table": "diagnosticSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"diagnosticSession_studentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "diagnosticSession_studentId_fkey",
+          "public",
+          "\"public\".\"diagnosticSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"diagnosticSession_studentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"diagnosticSession\"\nADD CONSTRAINT \"diagnosticSession_studentId_fkey\"\nFOREIGN KEY (\"studentId\")\nREFERENCES \"public\".\"student\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"diagnosticSession_studentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "diagnosticSession_studentId_fkey",
+          "public",
+          "\"public\".\"diagnosticSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.intervention.intervention_studentId_fkey",
+    "label": "Add foreign key \"intervention_studentId_fkey\" on \"intervention\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "intervention_studentId_fkey",
+        "table": "intervention"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"intervention_studentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "intervention_studentId_fkey",
+          "public",
+          "\"public\".\"intervention\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"intervention_studentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"intervention\"\nADD CONSTRAINT \"intervention_studentId_fkey\"\nFOREIGN KEY (\"studentId\")\nREFERENCES \"public\".\"student\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"intervention_studentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "intervention_studentId_fkey",
+          "public",
+          "\"public\".\"intervention\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.learnerProfile.learnerProfile_studentId_fkey",
+    "label": "Add foreign key \"learnerProfile_studentId_fkey\" on \"learnerProfile\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "learnerProfile_studentId_fkey",
+        "table": "learnerProfile"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"learnerProfile_studentId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "learnerProfile_studentId_fkey",
+          "public",
+          "\"public\".\"learnerProfile\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"learnerProfile_studentId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"learnerProfile\"\nADD CONSTRAINT \"learnerProfile_studentId_fkey\"\nFOREIGN KEY (\"studentId\")\nREFERENCES \"public\".\"student\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"learnerProfile_studentId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "learnerProfile_studentId_fkey",
+          "public",
+          "\"public\".\"learnerProfile\""
+        ]
+      }
+    ]
+  }
+]
